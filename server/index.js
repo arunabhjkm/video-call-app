@@ -21,12 +21,25 @@ app.get('/', (req, res) => {
 
 // Map to track which room a user is in: socket.id -> roomID
 const socketToRoom = {};
+// Map to track user name: socket.id -> name
+const socketToName = {};
 // Map to track users in a room: roomID -> [socket.id, ...]
 const usersInRoom = {};
 
 io.on('connection', socket => {
-    socket.on("join room", roomID => {
-        console.log(`[${socket.id}] joining room ${roomID}`);
+    socket.on("join room", payload => {
+        let roomID, name;
+        if (typeof payload === 'object') {
+            roomID = payload.roomID;
+            name = payload.name;
+        } else {
+            roomID = payload;
+            name = "Guest";
+        }
+
+        console.log(`[${socket.id}] joining room ${roomID} as ${name}`);
+        socketToName[socket.id] = name;
+
         if (usersInRoom[roomID]) {
             const length = usersInRoom[roomID].length;
             if (length === 4) {
@@ -39,7 +52,11 @@ io.on('connection', socket => {
             usersInRoom[roomID] = [socket.id];
         }
         socketToRoom[socket.id] = roomID;
-        const usersInThisRoom = usersInRoom[roomID].filter(id => id !== socket.id);
+
+        // Prepare list of other users with their names
+        const usersInThisRoom = usersInRoom[roomID]
+            .filter(id => id !== socket.id)
+            .map(id => ({ id, name: socketToName[id] }));
 
         console.log(`[${socket.id}] Sending 'all users': ${JSON.stringify(usersInThisRoom)}`);
         socket.emit("all users", usersInThisRoom);
@@ -47,7 +64,12 @@ io.on('connection', socket => {
 
     socket.on("sending signal", payload => {
         console.log(`[${socket.id}] sending signal to ${payload.userToSignal} (Caller: ${payload.callerID})`);
-        io.to(payload.userToSignal).emit('user joined', { signal: payload.signal, callerID: payload.callerID });
+        const callerName = socketToName[payload.callerID] || "Guest";
+        io.to(payload.userToSignal).emit('user joined', {
+            signal: payload.signal,
+            callerID: payload.callerID,
+            callerName: callerName
+        });
     });
 
     socket.on("returning signal", payload => {
