@@ -71,11 +71,11 @@ function AdminDashboard({ adminData }) {
   };
 
   const handleJoinMeeting = (roomId) => {
-    window.location.href = `/?slot=${roomId}&name=Admin`;
+    window.location.href = `/?s=${roomId}&name=Admin`;
   };
 
   const handleCopyLink = async (slotId) => {
-    const meetingLink = `${window.location.origin}/?slot=${slotId}`;
+    const meetingLink = `${window.location.origin}/?s=${slotId}`;
     try {
       await navigator.clipboard.writeText(meetingLink);
       setSuccess(`Meeting link copied to clipboard!`);

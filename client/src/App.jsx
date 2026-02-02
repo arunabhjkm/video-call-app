@@ -8,7 +8,7 @@ import ThankYou from './components/ThankYou';
 // Wrapper component to handle room/slot parameter
 function VideoCallWrapper() {
   const [searchParams] = useSearchParams();
-  const roomId = searchParams.get('room') || searchParams.get('slot');
+  const roomId = searchParams.get('room') || searchParams.get('slot') || searchParams.get('s');
 
   if (!roomId) {
     return <AdminRoute />;
