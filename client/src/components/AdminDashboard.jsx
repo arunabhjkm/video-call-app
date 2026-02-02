@@ -160,7 +160,24 @@ function AdminDashboard({ adminData }) {
               <h3>Info</h3>
               <div className="meeting-info">
                 <div className="meeting-date">Created: {meeting.createdAt?.toDate?.()?.toLocaleString() || 'N/A'}</div>
-                <div className="meeting-participants">Participants: {meeting.participants?.length || 0}</div>
+                <div className="meeting-participants">
+                  <strong>Participants ({meeting.participants?.length || 0}):</strong>
+                  {meeting.participants && meeting.participants.length > 0 ? (
+                    <ul className="participants-list">
+                      {meeting.participants.map((p, index) => {
+                        const name = typeof p === 'string' ? 'Guest' : (p.name || 'Guest');
+                        const id = typeof p === 'string' ? p : p.id;
+                        return (
+                          <li key={`${id}-${index}`}>
+                            {name} <span className="participant-id">({id.slice(0, 4)}...)</span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : (
+                    <div className="no-participants">No participants yet</div>
+                  )}
+                </div>
                 <div className="meeting-date">Ends at: {meeting.endsAt?.toDate?.()?.toLocaleString() || 'Not set'}</div>
               </div>
             </div>

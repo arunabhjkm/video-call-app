@@ -639,3 +639,44 @@
     opacity: 1;
   }
 }
+
+/* --- Participant List Styles --- */
+.participants-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 150px;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.participants-list li {
+  font-size: 13px;
+  color: #e2e8f0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.participants-list li:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.participant-id {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.no-participants {
+  font-size: 13px;
+  color: #64748b;
+  font-style: italic;
+  margin-top: 4px;
+}
