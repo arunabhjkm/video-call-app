@@ -145,7 +145,13 @@ function VideoCall({ initialRoomId }) {
         peerID: payload.callerID,
         peer,
       })
-      setPeers(users => [...users, { peerID: payload.callerID, peer }]);
+      setPeers(prevUsers => {
+        if (prevUsers.find(u => u.peerID === payload.callerID)) {
+          console.warn("Peer already in state, skipping add:", payload.callerID);
+          return prevUsers;
+        }
+        return [...prevUsers, { peerID: payload.callerID, peer }];
+      });
       if (payload.callerName) {
         setPeerNames(prev => ({ ...prev, [payload.callerID]: payload.callerName }));
       }
