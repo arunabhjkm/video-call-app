@@ -13,8 +13,11 @@ function AdminDashboard({ adminData }) {
   const [loadingMeetings, setLoadingMeetings] = useState(true);
   const [activeTab, setActiveTab] = useState('create'); // 'create' or 'join'
   const [customMinutes, setCustomMinutes] = useState({});
+  const [selectedMeeting, setSelectedMeeting] = useState(null);
 
   const adminEmail = localStorage.getItem('adminEmail') || adminData?.email || 'admin@example.com';
+
+
 
   useEffect(() => {
     // Initial one-time load (optional, mainly for fast first paint)
@@ -59,7 +62,7 @@ function AdminDashboard({ adminData }) {
     if (result.success) {
       setSuccess(`Meeting created successfully! Slot ID: ${slotId}`);
       setSlotId('');
-      await loadMeetings(); // Reload meetings list
+      // await loadMeetings(); // Listener handles update
     } else {
       setError(result.error || 'Failed to create meeting');
     }
@@ -78,7 +81,6 @@ function AdminDashboard({ adminData }) {
       setSuccess(`Meeting link copied to clipboard!`);
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      // Fallback for older browsers
       const textArea = document.createElement('textarea');
       textArea.value = meetingLink;
       document.body.appendChild(textArea);
@@ -116,12 +118,66 @@ function AdminDashboard({ adminData }) {
     }
   };
 
+  // Modal Component
+  const MeetingModal = ({ meeting, onClose }) => {
+    if (!meeting) return null;
+    return (
+      <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-content" onClick={e => e.stopPropagation()}>
+          <div className="modal-header">
+            <h2>Meeting Details: {meeting.slotId}</h2>
+            <button className="close-button" onClick={onClose}>&times;</button>
+          </div>
+          <div className="modal-body">
+            <div className="modal-section">
+              <h3>Set Timer</h3>
+              <div className="timer-control">
+                <div className="timer-buttons">
+                  <button type="button" onClick={() => handleSetTimer(meeting.slotId, 15)}>15m</button>
+                  <button type="button" onClick={() => handleSetTimer(meeting.slotId, 30)}>30m</button>
+                  <button type="button" onClick={() => handleSetTimer(meeting.slotId, 45)}>45m</button>
+                </div>
+                <div className="timer-custom">
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="Custom (min)"
+                    value={customMinutes[meeting.slotId] || ''}
+                    onChange={(e) => setCustomMinutes({ ...customMinutes, [meeting.slotId]: e.target.value })}
+                  />
+                  <button type="button" onClick={() => handleSetTimer(meeting.slotId, Number(customMinutes[meeting.slotId]))} disabled={!customMinutes[meeting.slotId]}>Set</button>
+                </div>
+              </div>
+            </div>
+            <div className="modal-section">
+              <h3>Actions</h3>
+              <div className="meeting-buttons">
+                <button onClick={() => handleCopyLink(meeting.slotId)} className="copy-link-button">📋 Copy Joining Link</button>
+                <button onClick={() => handleJoinMeeting(meeting.slotId)} className="join-meeting-button">Join Meeting</button>
+              </div>
+            </div>
+            <div className="modal-section">
+              <h3>Info</h3>
+              <div className="meeting-info">
+                <div className="meeting-date">Created: {meeting.createdAt?.toDate?.()?.toLocaleString() || 'N/A'}</div>
+                <div className="meeting-participants">Participants: {meeting.participants?.length || 0}</div>
+                <div className="meeting-date">Ends at: {meeting.endsAt?.toDate?.()?.toLocaleString() || 'Not set'}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('adminId');
     localStorage.removeItem('adminEmail');
     localStorage.removeItem('adminMobile');
     navigate('/admin');
   };
+
+
 
   return (
     <div className="admin-dashboard-container">
@@ -141,10 +197,10 @@ function AdminDashboard({ adminData }) {
           Create Meeting
         </button>
         <button
-          className={`tab-button ${activeTab === 'join' ? 'active' : ''}`}
-          onClick={() => setActiveTab('join')}
+          className={`tab-button ${activeTab === 'list' ? 'active' : ''}`}
+          onClick={() => setActiveTab('list')}
         >
-          Join Meeting
+          All Meetings
         </button>
       </div>
 
@@ -174,13 +230,18 @@ function AdminDashboard({ adminData }) {
                 {loading ? 'Creating...' : 'Create Meeting'}
               </button>
             </form>
+          </div>
+        )}
 
-            <div className="meetings-list-section">
-              <h3>Your Meetings</h3>
+        {activeTab === 'list' && (
+          <div className="join-meeting-section">
+            <h2>All Meetings</h2>
+
+            <div className="meetings-list-section" style={{ marginTop: 0, borderTop: 'none', paddingTop: 0 }}>
               {loadingMeetings ? (
                 <div className="loading">Loading meetings...</div>
               ) : meetings.length === 0 ? (
-                <div className="no-meetings">No meetings created yet</div>
+                <div className="no-meetings">No meetings found</div>
               ) : (
                 <div className="meetings-list">
                   {meetings.map((meeting) => (
@@ -188,133 +249,32 @@ function AdminDashboard({ adminData }) {
                       <div className="meeting-info">
                         <div className="meeting-slot">Slot ID: <strong>{meeting.slotId}</strong></div>
                         <div className="meeting-status">
-                          Status: <span className={`status-badge ${meeting.status}`}>{meeting.status}</span>
-                        </div>
-                        <div className="meeting-date">
-                          Created: {meeting.createdAt?.toDate?.()?.toLocaleString() || 'N/A'}
-                        </div>
-                        <div className="meeting-participants">
-                          Participants: {meeting.participants?.length || 0}
-                        </div>
-                        <div className="meeting-date">
-                          Ends at: {meeting.endsAt?.toDate?.()?.toLocaleString() || 'Not set'}
+                          <span className={`status-badge ${meeting.status}`}>{meeting.status}</span>
                         </div>
                       </div>
+
                       <div className="meeting-actions">
+                        {/* Status Control - Keep visible for quick access */}
                         <div className="status-control">
-                          <label>Status</label>
                           <select
                             value={meeting.status || 'pending'}
                             onChange={(e) => handleStatusChange(meeting.slotId, e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
                           >
                             <option value="pending">Pending</option>
                             <option value="active">Active</option>
                             <option value="success">Success</option>
                           </select>
                         </div>
-                        <div className="timer-control">
-                          <label>Set Timer</label>
-                          <div className="timer-buttons">
-                            <button type="button" onClick={() => handleSetTimer(meeting.slotId, 15)}>15m</button>
-                            <button type="button" onClick={() => handleSetTimer(meeting.slotId, 30)}>30m</button>
-                            <button type="button" onClick={() => handleSetTimer(meeting.slotId, 45)}>45m</button>
-                          </div>
-                          <div className="timer-custom">
-                            <input
-                              type="number"
-                              min="1"
-                              placeholder="Custom (min)"
-                              value={customMinutes[meeting.slotId] || ''}
-                              onChange={(e) => setCustomMinutes({
-                                ...customMinutes,
-                                [meeting.slotId]: e.target.value
-                              })}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => handleSetTimer(meeting.slotId, Number(customMinutes[meeting.slotId]))}
-                              disabled={!customMinutes[meeting.slotId]}
-                            >
-                              Set
-                            </button>
-                          </div>
-                        </div>
-                        <div className="meeting-buttons">
-                          <button
-                            onClick={() => handleCopyLink(meeting.slotId)}
-                            className="copy-link-button"
-                            title="Copy meeting link"
-                          >
-                            📋 Copy Link
-                          </button>
-                          <button
-                            onClick={() => handleJoinMeeting(meeting.slotId)}
-                            className="join-meeting-button"
-                          >
-                            Join
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
 
-        {activeTab === 'join' && (
-          <div className="join-meeting-section">
-            <h2>Join Existing Meeting</h2>
-            <div className="join-form">
-              <div className="form-group">
-                <label htmlFor="joinSlotId">Slot ID</label>
-                <input
-                  type="text"
-                  id="joinSlotId"
-                  value={slotId}
-                  onChange={(e) => setSlotId(e.target.value)}
-                  placeholder="Enter slot ID to join"
-                />
-              </div>
-              <button
-                onClick={() => slotId && handleJoinMeeting(slotId)}
-                className="join-button"
-                disabled={!slotId.trim()}
-              >
-                Join Meeting
-              </button>
-            </div>
-
-            <div className="meetings-list-section">
-              <h3>Your Meetings</h3>
-              {loadingMeetings ? (
-                <div className="loading">Loading meetings...</div>
-              ) : meetings.length === 0 ? (
-                <div className="no-meetings">No meetings available</div>
-              ) : (
-                <div className="meetings-list">
-                  {meetings.map((meeting) => (
-                    <div key={meeting.id} className="meeting-item">
-                      <div className="meeting-info">
-                        <div className="meeting-slot">Slot ID: <strong>{meeting.slotId}</strong></div>
-                        <div className="meeting-status">
-                          Status: <span className={`status-badge ${meeting.status}`}>{meeting.status}</span>
-                        </div>
-                      </div>
-                      <div className="meeting-buttons">
                         <button
-                          onClick={() => handleCopyLink(meeting.slotId)}
-                          className="copy-link-button"
-                          title="Copy meeting link"
+                          className="actions-button"
+                          onClick={() => setSelectedMeeting(meeting)}
+                          title="Edit Meeting"
                         >
-                          📋 Copy Link
-                        </button>
-                        <button
-                          onClick={() => handleJoinMeeting(meeting.slotId)}
-                          className="join-meeting-button"
-                        >
-                          Join
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M21.731 2.269a2.625 2.625 0 00-3.712 0l-1.157 1.157 3.712 3.712 1.157-1.157a2.625 2.625 0 000-3.712zM19.513 8.199l-3.712-3.712-12.15 12.15a5.25 5.25 0 00-1.32 2.214l-.8 2.685a.75.75 0 00.933.933l2.685-.8a5.25 5.25 0 002.214-1.32L19.513 8.2z" />
+                          </svg>
                         </button>
                       </div>
                     </div>
@@ -325,6 +285,13 @@ function AdminDashboard({ adminData }) {
           </div>
         )}
       </div>
+
+      {selectedMeeting && (
+        <MeetingModal
+          meeting={meetings.find(m => m.id === selectedMeeting.id) || selectedMeeting}
+          onClose={() => setSelectedMeeting(null)}
+        />
+      )}
     </div>
   );
 }
