@@ -63,9 +63,9 @@ body.in-call {
   border: 1px solid rgba(255, 255, 255, 0.1);
   padding: 48px 40px;
   border-radius: 24px;
-  box-shadow: 0 25px 70px rgba(0, 0, 0, 0.5), 
-              0 0 0 1px rgba(255, 255, 255, 0.05),
-              inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  box-shadow: 0 25px 70px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
   width: 100%;
   max-width: 500px;
   box-sizing: border-box;
@@ -77,12 +77,12 @@ body.in-call {
     padding: 56px 48px;
     max-width: 550px;
   }
-  
+
   .join-container:hover {
     transform: translateY(-6px);
-    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6), 
-                0 0 0 1px rgba(255, 255, 255, 0.15),
-                inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6),
+      0 0 0 1px rgba(255, 255, 255, 0.15),
+      inset 0 1px 0 rgba(255, 255, 255, 0.15);
     border-color: rgba(96, 165, 250, 0.3);
   }
 }
@@ -108,9 +108,9 @@ body.in-call {
 
 .join-container input:focus {
   border-color: #60a5fa;
-  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.2), 
-              0 0 0 8px rgba(96, 165, 250, 0.1),
-              0 4px 12px rgba(96, 165, 250, 0.2);
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.2),
+    0 0 0 8px rgba(96, 165, 250, 0.1),
+    0 4px 12px rgba(96, 165, 250, 0.2);
   background: rgba(30, 41, 59, 0.8);
   transform: translateY(-2px);
 }
@@ -126,7 +126,7 @@ body.in-call {
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 10px 25px rgba(59, 130, 246, 0.4),
-              0 0 0 0 rgba(59, 130, 246, 0.5);
+    0 0 0 0 rgba(59, 130, 246, 0.5);
   position: relative;
   overflow: hidden;
   letter-spacing: 0.3px;
@@ -150,7 +150,7 @@ body.in-call {
 .join-container button:hover:not(:disabled) {
   transform: translateY(-3px);
   box-shadow: 0 15px 35px rgba(59, 130, 246, 0.5),
-              0 0 0 4px rgba(59, 130, 246, 0.2);
+    0 0 0 4px rgba(59, 130, 246, 0.2);
   background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
 }
 
@@ -237,7 +237,7 @@ body.in-call {
     border-radius: 20px;
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
   }
-  
+
   .video-wrapper:hover {
     transform: translateY(-4px);
     box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
@@ -313,6 +313,7 @@ body.in-call {
     opacity: 0;
     transform: translateY(-10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -388,7 +389,7 @@ body.in-call {
     padding: 18px 36px;
     gap: 24px;
   }
-  
+
   .controls-bar:hover {
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.15);
     transform: translateX(-50%) translateY(-4px);
@@ -457,6 +458,7 @@ body.in-call {
     opacity: 0;
     transform: translateX(30px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -468,6 +470,7 @@ body.in-call {
     opacity: 0;
     transform: translateX(-30px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -475,18 +478,24 @@ body.in-call {
 }
 
 @keyframes float {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: translateY(0px);
   }
+
   50% {
     transform: translateY(-20px);
   }
 }
 
 @keyframes pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 1;
   }
+
   50% {
     opacity: 0.7;
   }
@@ -497,6 +506,7 @@ body.in-call {
     opacity: 0;
     transform: translateY(30px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -508,6 +518,7 @@ body.in-call {
     opacity: 0;
     transform: translateY(40px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -586,36 +597,70 @@ body.in-call {
 }
 
 
+
+/* --- Login Page Center Layout --- */
+.join-page-wrapper {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  background: radial-gradient(circle at top right, #1e293b, #0f172a);
+  /* Match body background */
+  overflow: hidden;
+}
+
+.join-page-content {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 500px;
+  padding: 20px;
+}
+
+.join-page-title {
+  text-align: center;
+  margin-bottom: 10px;
+}
+
 @media (max-width: 600px) {
   .container {
     padding: 0;
   }
-  
+
   .join-page-wrapper {
     padding: 30px 20px;
   }
-  
+
   .join-page-content {
     gap: 30px;
   }
-  
+
   .join-page-title {
     font-size: 2.5rem;
     letter-spacing: -1px;
   }
-  
+
   .join-page-subtitle {
     font-size: 1rem;
   }
-  
+
   .join-container {
     padding: 32px 24px;
   }
-  
+
   .camera-preview-wrapper {
     display: none;
   }
-  
+
   .container.in-call {
     padding: 0;
   }
@@ -742,20 +787,20 @@ body.in-call {
   .join-page-left {
     padding: 60px 50px;
   }
-  
+
   .left-content h1 {
     font-size: 4rem;
     letter-spacing: -2px;
   }
-  
+
   .join-page-right {
     padding: 60px 40px;
   }
-  
+
   .join-container {
     padding: 40px 36px;
   }
-  
+
   .camera-preview {
     max-width: 100%;
   }
@@ -807,4 +852,60 @@ body.in-call {
     aspect-ratio: 4/3;
     height: calc((100vh - 90px - 20px) / 3);
   }
+}
+
+/* --- Snackbar Component --- */
+.snackbar {
+  position: fixed;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #fff;
+  padding: 16px 24px;
+  border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  z-index: 2000;
+  min-width: 300px;
+  animation: slideInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.snackbar-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.snackbar-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top: 3px solid #60a5fa;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.snackbar-message {
+  font-size: 16px;
+  font-weight: 500;
+  color: #e2e8f0;
+}
+
+.network-indicator {
+  background: rgba(220, 38, 38, 0.9);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: white;
+  margin-left: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }

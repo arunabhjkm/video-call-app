@@ -1,14 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import io from 'socket.io-client';
 import Peer from 'simple-peer';
 import Video from './Video';
 import './App.css';
-import { checkMeetingExists, addParticipantToMeeting, listenMeetingChanges, updateMeetingStatus } from './services/firebaseService';
+import { checkMeetingExists, addParticipantToMeeting, removeParticipantFromMeeting, listenMeetingChanges, updateMeetingStatus } from './services/firebaseService';
 
 // Polyfills handled by vite-plugin-node-polyfills
 
-const SERVER_URL = 'https://video-chat-server-mrto.onrender.com';
+const SERVER_URL = 'https://video-call-app-4xz9.onrender.com';
 const socket = io(SERVER_URL);
 
 function VideoCall({ initialRoomId }) {
@@ -31,13 +31,25 @@ function VideoCall({ initialRoomId }) {
   const [cameraOn, setCameraOn] = useState(true);
   // Map peerID -> { mic: bool, camera: bool }
   const [peerStates, setPeerStates] = useState({});
+  // Map peerID -> name
+  const [peerNames, setPeerNames] = useState({});
+  const [fakeLoginError, setFakeLoginError] = useState('');
 
   const myVideo = useRef();
   const previewVideo = useRef();
   const peersRef = useRef([]);
   const streamRef = useRef();
 
+  const [searchParams] = useSearchParams();
+  const slotParam = searchParams.get('s') || searchParams.get('slot');
+  const nameParam = searchParams.get('n') || searchParams.get('name') || 'Guest';
+
   useEffect(() => {
+    // Ensure socket is connected
+    if (!socket.connected) {
+      socket.connect();
+    }
+
     // Socket connection listeners
     socket.on('connect', () => {
       const msg = `Socket Connected: ${socket.id}`;
@@ -48,6 +60,11 @@ function VideoCall({ initialRoomId }) {
       const msg = `Socket Error: ${err.message}`;
       console.error(msg);
     });
+
+    if (!slotParam) {
+      // If no slot param, we show login page and DO NOT ask for camera
+      return;
+    }
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       setStreamError("Camera access requires a secure connection (HTTPS) or use localhost. If you are on a different device, you must enable HTTPS.");
@@ -93,14 +110,24 @@ function VideoCall({ initialRoomId }) {
       });
 
     socket.on("all users", users => {
+      // Users is now array of {id, name}
       console.log("All users in room:", users);
       const peers = [];
-      users.forEach(userID => {
+      const names = {};
+
+      users.forEach(user => {
+        // Handle backward compatibility if user is just string ID
+        const userID = user.id || user;
+        const userName = user.name || 'Guest';
+
         const peer = createPeer(userID, socket.id, streamRef.current);
         peersRef.current.push({ peerID: userID, peer });
         peers.push({ peerID: userID, peer });
+        names[userID] = userName;
       });
+
       setPeers(peers);
+      setPeerNames(prev => ({ ...prev, ...names }));
       setIsJoining(false);
     });
 
@@ -112,6 +139,9 @@ function VideoCall({ initialRoomId }) {
         peer,
       })
       setPeers(users => [...users, { peerID: payload.callerID, peer }]);
+      if (payload.callerName) {
+        setPeerNames(prev => ({ ...prev, [payload.callerID]: payload.callerName }));
+      }
     });
 
     socket.on("receiving returned signal", payload => {
@@ -122,6 +152,7 @@ function VideoCall({ initialRoomId }) {
     });
 
     socket.on("user left", id => {
+      console.log("User left:", id);
       const peerObj = peersRef.current.find(p => p.peerID === id);
       if (peerObj) {
         peerObj.peer.destroy();
@@ -155,6 +186,37 @@ function VideoCall({ initialRoomId }) {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
+      socket.disconnect(); // Ensure socket disconnects on unmount
+    };
+  }, []);
+
+  // Monitor Network Quality
+  useEffect(() => {
+    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    if (!connection) return;
+
+    const updateNetworkStatus = () => {
+      const downlink = connection.downlink; // Mb/s
+      // Consider low (< 1.5 Mbps) or if type is 'cellular' (2g/3g) though 'downlink' is better measure.
+      // If downlink is small, we flag it.
+      // 4g/wifi is usually good, but 'downlink' reflects actual bandwidth estimate.
+      const isLow = downlink < 1.0;
+
+      const status = isLow ? 'low' : 'good';
+      socket.emit("update status", { type: "network", status: status });
+
+      // Also update local visual if we want to see our own status? 
+      // User requested "red network indicator on its screen", usually means on the user's video feed as seen by OTHERS.
+      // But let's log it.
+      console.log(`Network status changed: ${status} (Downlink: ${downlink})`);
+    };
+
+    connection.addEventListener('change', updateNetworkStatus);
+    // updates not always frequent, so check once on mount
+    updateNetworkStatus();
+
+    return () => {
+      connection.removeEventListener('change', updateNetworkStatus);
     };
   }, []);
 
@@ -196,8 +258,47 @@ function VideoCall({ initialRoomId }) {
     return peer;
   }
 
-  const joinRoom = async () => {
-    if (!roomID) {
+  // const [searchParams] = useSearchParams();
+  // const slotParam = searchParams.get('s') || searchParams.get('slot');
+  const [autoJoinAttempted, setAutoJoinAttempted] = useState(false);
+
+  const [socketJoined, setSocketJoined] = useState(false);
+
+  // Auto-fill room ID from URL
+  useEffect(() => {
+    if (slotParam) {
+      setRoomID(slotParam);
+    }
+  }, [slotParam]);
+
+  // Handle Auto-Join when stream is ready
+  useEffect(() => {
+    if (slotParam && stream && !joined && !checkingSlot && !autoJoinAttempted) {
+      setAutoJoinAttempted(true);
+      joinRoom(slotParam);
+    }
+  }, [slotParam, stream, joined, checkingSlot, autoJoinAttempted]);
+
+  // Handle Pending -> Active Transition
+  useEffect(() => {
+    if (joined && meetingStatus === 'active' && !socketJoined && roomID) {
+      console.log("Meeting became active, joining socket room now...");
+
+      // We must add participant to Firestore too, because joinRoom skipped it when status was pending
+      if (socket.id) {
+        addParticipantToMeeting(roomID, socket.id, nameParam)
+          .then(() => console.log("Participant added to Firestore on active transition"))
+          .catch(err => console.error("Failed to add participant on active transition", err));
+      }
+
+      socket.emit("join room", { roomID, name: nameParam });
+      setSocketJoined(true);
+    }
+  }, [joined, meetingStatus, socketJoined, roomID]);
+
+
+  const joinRoom = async (idToJoin = roomID) => {
+    if (!idToJoin) {
       setSlotError('Please enter a slot ID');
       return;
     }
@@ -207,37 +308,51 @@ function VideoCall({ initialRoomId }) {
       return;
     }
 
+    if (!socket.id) {
+      console.log("Socket ID not ready, waiting...");
+      setTimeout(() => joinRoom(idToJoin), 500);
+      return;
+    }
+
     setCheckingSlot(true);
     setSlotError('');
 
     // Check if slot ID exists in Firestore
-    const checkResult = await checkMeetingExists(roomID);
-    
+    const checkResult = await checkMeetingExists(idToJoin);
+
     if (!checkResult.exists) {
       setCheckingSlot(false);
-      setSlotError(checkResult.error || 'Invalid slot ID. Please check and try again.');
+      const errorMsg = checkResult.error || 'Meeting not found. Please check and try again.';
+      setSlotError(errorMsg);
+      alert(errorMsg); // Show alert modal as requested
       return;
     }
 
     const meetingStatus = checkResult.status || checkResult.meetingData?.status || 'pending';
-    
+
     // Check meeting status
     if (meetingStatus === 'pending') {
       setCheckingSlot(false);
-      setSlotError('Please wait, the meeting will begin shortly.');
+      // We allow joining the "view" but show the pending snackbar
+      setMeetingStatus('pending');
+      setJoined(true);
+      // We do NOT emit "join room" yet if we want to wait, or we emit it and the server handles it.
+      // Assuming we just want to show the self-view and the waiting message:
       return;
     }
 
     if (meetingStatus === 'success') {
       setCheckingSlot(false);
-      setSlotError('This meeting has ended.');
+      cleanupAndGoThankYou(); // Directly go to thank you logic
       return;
     }
 
     // Only allow join if status is 'active'
     if (meetingStatus !== 'active') {
       setCheckingSlot(false);
-      setSlotError('This meeting is not available.');
+      const errorMsg = 'This meeting is not available.';
+      setSlotError(errorMsg);
+      alert(errorMsg); // Show alert modal as requested
       return;
     }
 
@@ -252,12 +367,13 @@ function VideoCall({ initialRoomId }) {
     }
 
     // Add participant to meeting
-    await addParticipantToMeeting(roomID, socket.id);
+    await addParticipantToMeeting(idToJoin, socket.id, nameParam);
 
     // Join the room
     setIsJoining(true);
-    socket.emit("join room", roomID);
+    socket.emit("join room", { roomID: idToJoin, name: nameParam });
     setJoined(true);
+    setSocketJoined(true);
     setCheckingSlot(false);
     setTimeout(() => setIsJoining(false), 2000);
   }
@@ -284,8 +400,18 @@ function VideoCall({ initialRoomId }) {
     }
   };
 
-  const cleanupAndGoThankYou = () => {
+  const cleanupAndGoThankYou = async () => {
     try {
+      // Remove self from Firestore participants list
+      if (roomID && socket.id) {
+        // User requested to remove regardless of tab open/close, so we MUST await this
+        try {
+          await removeParticipantFromMeeting(roomID, socket.id);
+        } catch (err) {
+          console.error("Failed to remove participant", err);
+        }
+      }
+
       // stop local media
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
@@ -298,9 +424,28 @@ function VideoCall({ initialRoomId }) {
       setPeers([]);
     } finally {
       setJoined(false);
-      navigate('/thank-you', { replace: true });
+      navigate('/thank-you', { replace: true, state: { roomID, name: nameParam } });
     }
   };
+
+  // Cleanup on unmount / refresh (best effort)
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (roomID && socket.id && joined) {
+        // Using sendBeacon or similar would be better, but keep simple first
+        // We can't use async here reliably for Firestore, but we can try
+        // Actually, for unload, it's tricky.
+        // Let's at least handle the component unmount cleanup
+      }
+    };
+
+    // We can rely on the return function of useEffect
+    return () => {
+      if (roomID && socket.id && joined) {
+        removeParticipantFromMeeting(roomID, socket.id).catch(err => console.error("Cleanup error", err));
+      }
+    };
+  }, [roomID, joined]);
 
   // End-call button uses this
   const disconnect = () => {
@@ -331,13 +476,13 @@ function VideoCall({ initialRoomId }) {
         const data = payload.data;
         const newStatus = data.status || 'active';
         setMeetingStatus(newStatus);
-        
+
         // If status changes to 'success', send user to Thank You page
         if (newStatus === 'success') {
           cleanupAndGoThankYou();
           return;
         }
-        
+
         if (data.endsAt) {
           const ends = data.endsAt.toDate ? data.endsAt.toDate() : new Date(data.endsAt);
           setMeetingEndsAt(ends);
@@ -398,44 +543,48 @@ function VideoCall({ initialRoomId }) {
     };
   }, [joined]);
 
+  // Attach stream to myVideo when joined
+  useEffect(() => {
+    if (joined && stream && myVideo.current) {
+      myVideo.current.srcObject = stream;
+    }
+  }, [joined, stream]);
+
   return (
     <div className={`container ${joined ? 'in-call' : ''}`}>
-      {!joined && (
+      {!joined && !slotParam && (
         <div className="join-page-wrapper">
           <div className="animated-shape shape-1"></div>
           <div className="animated-shape shape-2"></div>
           <div className="animated-shape shape-3"></div>
-          <div className="join-page-content">
-            <h1 className="join-page-title">Group Video Chat</h1>
-            <p className="join-page-subtitle">Enter your slot ID to join the meeting</p>
-            <div className="join-container">
+          <div className="join-page-content" style={{ flexDirection: 'column', gap: '20px' }}>
+            <h1 className="join-page-title">Login</h1>
+
+            <div className="join-container" style={{ flexDirection: 'column', gap: '15px' }}>
               <input
                 type="text"
-                placeholder="Enter Slot ID"
-                value={roomID}
-                onChange={e => {
-                  setRoomID(e.target.value);
-                  setSlotError('');
-                }}
+                placeholder="Username"
+                style={{ marginBottom: '0' }}
+                onChange={() => setFakeLoginError('')}
               />
-              {slotError && <div className="error-message" style={{ color: 'red', marginTop: '10px' }}>{slotError}</div>}
-              <button onClick={joinRoom} disabled={checkingSlot}>
-                {checkingSlot ? 'Checking...' : 'Join Room'}
+              <input
+                type="password"
+                placeholder="Password"
+                style={{ marginBottom: '0' }}
+                onChange={() => setFakeLoginError('')}
+              />
+
+              {fakeLoginError && <div className="error-message" style={{ color: 'red', marginTop: '0', fontSize: '14px' }}>{fakeLoginError}</div>}
+
+              <button onClick={() => setFakeLoginError('Invalid credentials')} style={{ marginTop: '5px' }}>
+                Login
               </button>
             </div>
-            {stream && !joined && (
-              <div className="camera-preview-wrapper">
-                <div className="camera-preview">
-                  <video playsInline muted ref={previewVideo} autoPlay />
-                  <div className="preview-label">You</div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}
 
-      {(isJoining || checkingSlot) && (
+      {(isJoining || checkingSlot || (!joined && slotParam)) && (
         <div style={{
           position: 'fixed',
           top: 0,
@@ -451,12 +600,14 @@ function VideoCall({ initialRoomId }) {
         }}>
           <div className="spinner"></div>
           <p style={{ color: 'white', marginTop: '20px', fontSize: '18px' }}>
-            {checkingSlot ? 'Verifying slot ID...' : 'Joining room...'}
+            {checkingSlot
+              ? (slotError === 'Meeting will begin soon...' ? 'Meeting will begin soon...' : 'Verifying slot ID...')
+              : (!stream ? 'Requesting camera access...' : 'Joining room...')}
           </p>
         </div>
       )}
 
-      {streamError && <div className="error-message" style={{ color: 'red', margin: '10px' }}>{streamError}</div>}
+      {slotParam && streamError && <div className="error-message" style={{ color: 'red', margin: '10px' }}>{streamError}</div>}
 
       {joined && meetingStatus === 'success' && (
         <div className="error-message" style={{ margin: '10px', textAlign: 'center' }}>
@@ -470,36 +621,50 @@ function VideoCall({ initialRoomId }) {
         </div>
       )}
 
-      <div
-        className={`video-container layout-${grid.layout}`}
-        data-user-count={totalUsers}
-        style={{ '--grid-cols': grid.cols }}
-      >
-        <div className="video-wrapper">
-          <video playsInline muted ref={myVideo} autoPlay />
-          <div className="user-label">You</div>
-          <div className="status-icons">
-            {!micOn && <span className="icon" title="Microphone muted">🔇</span>}
-            {!cameraOn && <span className="icon" title="Camera off">📹</span>}
-          </div>
-        </div>
-        {peers.map((peer) => {
-          const status = peerStates[peer.peerID] || {};
-          const isMicOn = status.mic !== undefined ? status.mic : true;
-          const isCamOn = status.camera !== undefined ? status.camera : true;
-
-          return (
-            <div className="video-wrapper remote-video" key={peer.peerID}>
-              <Video peer={peer.peer} />
-              <div className="user-label">User {peer.peerID.slice(0, 4)}</div>
-              <div className="status-icons">
-                {!isMicOn && <span className="icon" title="Microphone muted">🔇</span>}
-                {!isCamOn && <span className="icon" title="Camera off">📹</span>}
-              </div>
+      {joined && (
+        <div
+          className={`video-container layout-${grid.layout}`}
+          data-user-count={totalUsers}
+          style={{ '--grid-cols': grid.cols }}
+        >
+          <div className="video-wrapper">
+            <video playsInline muted ref={myVideo} autoPlay />
+            <div className="user-label">{nameParam || 'You'}</div>
+            <div className="status-icons">
+              {!micOn && <span className="icon" title="Microphone muted">🔇</span>}
+              {!cameraOn && <span className="icon" title="Camera off">📹</span>}
             </div>
-          );
-        })}
-      </div>
+          </div>
+          {peers.map((peer) => {
+            const status = peerStates[peer.peerID] || {};
+            const isMicOn = status.mic !== undefined ? status.mic : true;
+            const isCamOn = status.camera !== undefined ? status.camera : true;
+            const peerName = peerNames[peer.peerID] || `User ${peer.peerID.slice(0, 4)}`;
+
+            return (
+              <div className="video-wrapper remote-video" key={peer.peerID}>
+                <Video peer={peer.peer} />
+                <div className="user-label">{peerName}</div>
+                <div className="status-icons">
+                  {!isMicOn && <span className="icon" title="Microphone muted">🔇</span>}
+                  {!isCamOn && <span className="icon" title="Camera off">📹</span>}
+                  {status.network === 'low' && <span className="network-indicator" title="Low Connectivity">⚠️ Low Network</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Pending Status Snackbar */}
+      {joined && meetingStatus === 'pending' && (
+        <div className="snackbar">
+          <div className="snackbar-icon">
+            <div className="snackbar-spinner"></div>
+          </div>
+          <div className="snackbar-message">Meeting will begin soon</div>
+        </div>
+      )}
 
       {joined && (
         <div className="controls-bar">

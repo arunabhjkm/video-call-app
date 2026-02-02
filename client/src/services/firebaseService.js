@@ -1,15 +1,17 @@
-import { 
-  collection, 
-  doc, 
-  getDoc, 
-  setDoc, 
-  addDoc, 
-  query, 
-  where, 
+import {
+  collection,
+  doc,
+  getDoc,
+  setDoc,
+  addDoc,
+  query,
+  where,
   getDocs,
   updateDoc,
   serverTimestamp,
-  onSnapshot 
+  onSnapshot,
+  arrayRemove,
+  arrayUnion
 } from 'firebase/firestore';
 import { db } from '../firebase';
 
@@ -27,9 +29,9 @@ export const authenticateAdmin = async (mobile, pin) => {
       where('mobile', '==', mobile),
       where('pin', '==', pin)
     );
-    
+
     const querySnapshot = await getDocs(adminQuery);
-    
+
     if (!querySnapshot.empty) {
       const adminDoc = querySnapshot.docs[0];
       return {
@@ -59,7 +61,7 @@ export const createMeeting = async (slotId, adminEmail) => {
   try {
     const meetingRef = doc(db, MEETINGS_COLLECTION, slotId);
     const meetingDoc = await getDoc(meetingRef);
-    
+
     // Check if meeting already exists
     if (meetingDoc.exists()) {
       return {
@@ -67,7 +69,7 @@ export const createMeeting = async (slotId, adminEmail) => {
         error: 'Meeting with this slot ID already exists'
       };
     }
-    
+
     // Create new meeting
     const meetingData = {
       slotId: slotId,
@@ -80,9 +82,9 @@ export const createMeeting = async (slotId, adminEmail) => {
       participants: [],
       createdBy: adminEmail
     };
-    
+
     await setDoc(meetingRef, meetingData);
-    
+
     return {
       success: true,
       meetingId: slotId,
@@ -104,7 +106,7 @@ export const checkMeetingExists = async (slotId) => {
   try {
     const meetingRef = doc(db, MEETINGS_COLLECTION, slotId);
     const meetingDoc = await getDoc(meetingRef);
-    
+
     if (meetingDoc.exists()) {
       const meetingData = meetingDoc.data();
       return {
@@ -131,35 +133,89 @@ export const checkMeetingExists = async (slotId) => {
 /**
  * Update meeting when participant joins
  */
-export const addParticipantToMeeting = async (slotId, participantId) => {
+export const addParticipantToMeeting = async (slotId, participantId, participantName = 'Guest') => {
   try {
     const meetingRef = doc(db, MEETINGS_COLLECTION, slotId);
     const meetingDoc = await getDoc(meetingRef);
-    
+
     if (!meetingDoc.exists()) {
       return {
         success: false,
         error: 'Meeting not found'
       };
     }
-    
+
     const meetingData = meetingDoc.data();
     const participants = meetingData.participants || [];
-    
+
+    // Check if participant is already in list (by ID)
+    let isPresent = false;
+    // Handle legacy array of strings if necessary, though we prefer objects now
+    if (participants.length > 0 && typeof participants[0] === 'string') {
+      if (participants.includes(participantId)) isPresent = true;
+    } else {
+      if (participants.some(p => p.id === participantId)) isPresent = true;
+    }
+
     // Add participant if not already in list
-    if (!participants.includes(participantId)) {
-      participants.push(participantId);
+    if (!isPresent) {
+      // Use arrayUnion with the new object structure
+      const newParticipant = { id: participantId, name: participantName, joinedAt: new Date().toISOString() };
+
+      console.log(`Adding participant ${participantId} (${participantName}) to slot ${slotId}`);
       await updateDoc(meetingRef, {
-        participants: participants,
+        participants: arrayUnion(newParticipant),
         updatedAt: serverTimestamp()
       });
+      console.log("Participant added successfully");
+    } else {
+      console.log("Participant already present");
     }
-    
+
     return {
       success: true
     };
   } catch (error) {
     console.error('Error adding participant:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};
+
+/**
+ * Remove participant from meeting
+ */
+export const removeParticipantFromMeeting = async (slotId, participantId) => {
+  try {
+    const meetingRef = doc(db, MEETINGS_COLLECTION, slotId);
+    const meetingDoc = await getDoc(meetingRef);
+
+    if (meetingDoc.exists()) {
+      const data = meetingDoc.data();
+      let participants = data.participants || [];
+      const initialLength = participants.length;
+
+      // Filter out the participant by ID
+      participants = participants.filter(p => {
+        if (typeof p === 'string') return p !== participantId;
+        return p.id !== participantId;
+      });
+
+      if (participants.length !== initialLength) {
+        await updateDoc(meetingRef, {
+          participants: participants,
+          updatedAt: serverTimestamp()
+        });
+      }
+    }
+
+    return {
+      success: true
+    };
+  } catch (error) {
+    console.error('Error removing participant:', error);
     return {
       success: false,
       error: error.message
@@ -176,17 +232,17 @@ export const getAdminMeetings = async (adminEmail) => {
       collection(db, MEETINGS_COLLECTION),
       where('adminEmail', '==', adminEmail)
     );
-    
+
     const querySnapshot = await getDocs(meetingsQuery);
     const meetings = [];
-    
+
     querySnapshot.forEach((doc) => {
       meetings.push({
         id: doc.id,
         ...doc.data()
       });
     });
-    
+
     return {
       success: true,
       meetings: meetings
@@ -239,7 +295,7 @@ export const listenAdminMeetings = (adminEmail, callback) => {
       error: error.message,
       meetings: [],
     });
-    return () => {};
+    return () => { };
   }
 };
 
@@ -254,7 +310,7 @@ export const updateMeetingStatus = async (slotId, status, endsAt = null) => {
       endsAt: endsAt ? new Date(endsAt) : null,
       updatedAt: serverTimestamp()
     });
-    
+
     return {
       success: true
     };
