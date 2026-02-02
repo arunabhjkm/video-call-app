@@ -133,6 +133,13 @@ function VideoCall({ initialRoomId }) {
 
     socket.on("user joined", payload => {
       console.log("Client received 'user joined' from:", payload.callerID);
+
+      // Prevent duplicate peers
+      if (peersRef.current.find(p => p.peerID === payload.callerID)) {
+        console.warn("Duplicate 'user joined' event received for:", payload.callerID);
+        return;
+      }
+
       const peer = addPeer(payload.signal, payload.callerID, streamRef.current);
       peersRef.current.push({
         peerID: payload.callerID,
