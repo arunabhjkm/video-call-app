@@ -71,7 +71,7 @@ function AdminDashboard({ adminData }) {
   };
 
   const handleJoinMeeting = (roomId) => {
-    window.location.href = `/?room=${roomId}`;
+    window.location.href = `/?room=${roomId}&name=Admin`;
   };
 
   const handleCopyLink = async (slotId) => {
@@ -197,6 +197,12 @@ function AdminDashboard({ adminData }) {
           Create Meeting
         </button>
         <button
+          className={`tab-button ${activeTab === 'join' ? 'active' : ''}`}
+          onClick={() => setActiveTab('join')}
+        >
+          Join Meeting
+        </button>
+        <button
           className={`tab-button ${activeTab === 'list' ? 'active' : ''}`}
           onClick={() => setActiveTab('list')}
         >
@@ -230,6 +236,31 @@ function AdminDashboard({ adminData }) {
                 {loading ? 'Creating...' : 'Create Meeting'}
               </button>
             </form>
+          </div>
+        )}
+
+        {activeTab === 'join' && (
+          <div className="join-meeting-section">
+            <h2>Join Existing Meeting</h2>
+            <div className="join-form">
+              <div className="form-group">
+                <label htmlFor="joinSlotId">Slot ID</label>
+                <input
+                  type="text"
+                  id="joinSlotId"
+                  value={slotId}
+                  onChange={(e) => setSlotId(e.target.value)}
+                  placeholder="Enter slot ID to join"
+                />
+              </div>
+              <button
+                onClick={() => slotId && handleJoinMeeting(slotId)}
+                className="join-button"
+                disabled={!slotId.trim()}
+              >
+                Join Meeting
+              </button>
+            </div>
           </div>
         )}
 
