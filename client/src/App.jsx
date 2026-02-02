@@ -9,7 +9,11 @@ import ThankYou from './components/ThankYou';
 function VideoCallWrapper() {
   const [searchParams] = useSearchParams();
   const roomId = searchParams.get('room') || searchParams.get('slot');
-  
+
+  if (!roomId) {
+    return <AdminRoute />;
+  }
+
   return <VideoCall initialRoomId={roomId} />;
 }
 
@@ -23,7 +27,7 @@ function AdminRoute() {
     // Check if admin is already logged in
     const adminId = localStorage.getItem('adminId');
     const adminEmail = localStorage.getItem('adminEmail');
-    
+
     if (adminId && adminEmail) {
       setAdminData({ email: adminEmail, id: adminId });
       setIsAuthenticated(true);
@@ -37,16 +41,16 @@ function AdminRoute() {
   };
 
   if (loading) {
-  return (
-        <div style={{
-          display: 'flex',
+    return (
+      <div style={{
+        display: 'flex',
         justifyContent: 'center',
-          alignItems: 'center',
+        alignItems: 'center',
         minHeight: '100vh',
         background: '#0f172a',
         color: '#e2e8f0'
-        }}>
-          <div className="spinner"></div>
+      }}>
+        <div className="spinner"></div>
       </div>
     );
   }
@@ -67,7 +71,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<VideoCallWrapper />} />
-        <Route path="/admin" element={<AdminRoute />} />
+        {/* <Route path="/admin" element={<AdminRoute />} /> Route merging into root */}
         <Route path="/thank-you" element={<ThankYou />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
