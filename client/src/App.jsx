@@ -4,6 +4,7 @@ import VideoCall from './VideoCall';
 import AdminLogin from './components/AdminLogin';
 import AdminDashboard from './components/AdminDashboard';
 import ThankYou from './components/ThankYou';
+import UserJoin from './components/UserJoin';
 
 // Wrapper component to handle room/slot parameter
 function VideoCallWrapper() {
@@ -11,7 +12,7 @@ function VideoCallWrapper() {
   const roomId = searchParams.get('room') || searchParams.get('slot') || searchParams.get('s');
 
   if (!roomId) {
-    return <AdminRoute />;
+    return <UserJoin />;
   }
 
   return <VideoCall initialRoomId={roomId} />;
@@ -71,7 +72,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<VideoCallWrapper />} />
-        {/* <Route path="/admin" element={<AdminRoute />} /> Route merging into root */}
+        <Route path="/admin" element={<AdminRoute />} />
         <Route path="/thank-you" element={<ThankYou />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
