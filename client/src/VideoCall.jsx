@@ -153,12 +153,20 @@ function VideoCall({ initialRoomId }) {
       if (payload.callerType) {
         setPeerTypes(prev => ({ ...prev, [payload.callerID]: payload.callerType }));
       }
+      // Update initial status if provided
+      if (payload.callerStatus) {
+        setPeerStates(prev => ({ ...prev, [payload.callerID]: payload.callerStatus }));
+      }
     });
 
     socket.on("receiving returned signal", payload => {
       const item = peersRef.current.find(p => p.peerID === payload.id);
       if (item) {
         item.peer.signal(payload.signal);
+      }
+      // Update status if provided
+      if (payload.status) {
+        setPeerStates(prev => ({ ...prev, [payload.id]: payload.status }));
       }
     });
 
@@ -229,6 +237,10 @@ function VideoCall({ initialRoomId }) {
       initiator: true,
       trickle: false,
       stream,
+      offerOptions: {
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true
+      }
     });
 
     peer.on("stream", stream => {
@@ -236,7 +248,13 @@ function VideoCall({ initialRoomId }) {
     });
 
     peer.on("signal", signal => {
-      socket.emit("sending signal", { userToSignal, callerID, signal })
+      // Send local MIC/CAM status with the signal
+      socket.emit("sending signal", {
+        userToSignal,
+        callerID,
+        signal,
+        callerStatus: { mic: micOn, camera: cameraOn }
+      })
     })
 
     return peer;
@@ -247,6 +265,10 @@ function VideoCall({ initialRoomId }) {
       initiator: false,
       trickle: false,
       stream,
+      offerOptions: {
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true
+      }
     })
 
     peer.on("stream", stream => {
@@ -254,7 +276,12 @@ function VideoCall({ initialRoomId }) {
     });
 
     peer.on("signal", signal => {
-      socket.emit("returning signal", { signal, callerID })
+      // Send local MIC/CAM status with the returned signal
+      socket.emit("returning signal", {
+        signal,
+        callerID,
+        status: { mic: micOn, camera: cameraOn }
+      })
     })
 
     peer.signal(incomingSignal);

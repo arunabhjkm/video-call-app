@@ -79,13 +79,18 @@ io.on('connection', socket => {
             signal: payload.signal,
             callerID: payload.callerID,
             callerName: callerName,
-            callerType: callerType
+            callerType: callerType,
+            callerStatus: payload.callerStatus // Pass MIC/CAM status
         });
     });
 
     socket.on("returning signal", payload => {
         console.log(`[${socket.id}] returning signal to ${payload.callerID}`);
-        io.to(payload.callerID).emit('receiving returned signal', { signal: payload.signal, id: socket.id });
+        io.to(payload.callerID).emit('receiving returned signal', {
+            signal: payload.signal,
+            id: socket.id,
+            status: payload.status // Pass MIC/CAM status
+        });
     });
 
     socket.on('disconnect', () => {
