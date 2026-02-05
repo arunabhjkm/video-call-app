@@ -40,9 +40,16 @@ function VideoCall({ initialRoomId }) {
   const peersRef = useRef([]);
   const streamRef = useRef();
 
-  const [searchParams] = useSearchParams();
   const slotParam = searchParams.get('s') || searchParams.get('slot');
   const nameParam = searchParams.get('n') || searchParams.get('name') || 'Guest';
+  const typeParam = searchParams.get('t') || searchParams.get('type') || 'client'; // 'c' or 'l' or full string
+
+  const getUserTypeIcon = (typeString) => {
+    if (!typeString) return '👤';
+    const t = typeString.toLowerCase();
+    if (t === 'l' || t === 'lawyer') return '🎓';
+    return '👤';
+  };
 
   useEffect(() => {
     // Ensure socket is connected
@@ -110,24 +117,36 @@ function VideoCall({ initialRoomId }) {
       });
 
     socket.on("all users", users => {
-      // Users is now array of {id, name}
+      // Users is now array of {id, name, type}
       console.log("All users in room:", users);
       const peers = [];
       const names = {};
+      const newPeerStates = {}; // We can reuse peerStates to store type if we want, or separate state. 
+      // Actually peerNames is just name. Let's append icon to name OR store type separately.
+      // Storing type in peerNames might be easiest for display: "🎓 Name"
+
+      const types = {};
 
       users.forEach(user => {
         // Handle backward compatibility if user is just string ID
         const userID = user.id || user;
         const userName = user.name || 'Guest';
+        const userType = user.type || 'client'; // default
 
         const peer = createPeer(userID, socket.id, streamRef.current);
         peersRef.current.push({ peerID: userID, peer });
         peers.push({ peerID: userID, peer });
         names[userID] = userName;
+        types[userID] = userType;
       });
 
       setPeers(peers);
       setPeerNames(prev => ({ ...prev, ...names }));
+      // We need a state for types. Let's just update peerNames to include the type for now 
+      // OR better, add a new state for types to keep data clean?
+      // Let's use peerStates to store static data like type as well, or just a new state.
+      // new state is cleaner.
+      setPeerTypes(prev => ({ ...prev, ...types }));
       setIsJoining(false);
     });
 
@@ -152,8 +171,12 @@ function VideoCall({ initialRoomId }) {
         }
         return [...prevUsers, { peerID: payload.callerID, peer }];
       });
+
       if (payload.callerName) {
         setPeerNames(prev => ({ ...prev, [payload.callerID]: payload.callerName }));
+      }
+      if (payload.callerType) {
+        setPeerTypes(prev => ({ ...prev, [payload.callerID]: payload.callerType }));
       }
     });
 
@@ -277,6 +300,9 @@ function VideoCall({ initialRoomId }) {
 
   const [socketJoined, setSocketJoined] = useState(false);
 
+  // New State for Peer Types
+  const [peerTypes, setPeerTypes] = useState({});
+
   // Auto-fill room ID from URL
   useEffect(() => {
     if (slotParam) {
@@ -304,7 +330,7 @@ function VideoCall({ initialRoomId }) {
           .catch(err => console.error("Failed to add participant on active transition", err));
       }
 
-      socket.emit("join room", { roomID, name: nameParam });
+      socket.emit("join room", { roomID, name: nameParam, type: typeParam });
       setSocketJoined(true);
     }
   }, [joined, meetingStatus, socketJoined, roomID]);
@@ -384,7 +410,7 @@ function VideoCall({ initialRoomId }) {
 
     // Join the room
     setIsJoining(true);
-    socket.emit("join room", { roomID: idToJoin, name: nameParam });
+    socket.emit("join room", { roomID: idToJoin, name: nameParam, type: typeParam });
     setJoined(true);
     setSocketJoined(true);
     setCheckingSlot(false);
@@ -642,7 +668,7 @@ function VideoCall({ initialRoomId }) {
         >
           <div className="video-wrapper">
             <video playsInline muted ref={myVideo} autoPlay />
-            <div className="user-label">{nameParam || 'You'}</div>
+            <div className="user-label">{getUserTypeIcon(typeParam)} {nameParam || 'You'}</div>
             <div className="status-icons">
               {!micOn && <span className="icon" title="Microphone muted">🔇</span>}
               {!cameraOn && <span className="icon" title="Camera off">📹</span>}
@@ -653,11 +679,12 @@ function VideoCall({ initialRoomId }) {
             const isMicOn = status.mic !== undefined ? status.mic : true;
             const isCamOn = status.camera !== undefined ? status.camera : true;
             const peerName = peerNames[peer.peerID] || `User ${peer.peerID.slice(0, 4)}`;
+            const peerType = peerTypes[peer.peerID] || 'client'; // default for remote
 
             return (
               <div className="video-wrapper remote-video" key={peer.peerID}>
                 <Video peer={peer.peer} />
-                <div className="user-label">{peerName}</div>
+                <div className="user-label">{getUserTypeIcon(peerType)} {peerName}</div>
                 <div className="status-icons">
                   {!isMicOn && <span className="icon" title="Microphone muted">🔇</span>}
                   {!isCamOn && <span className="icon" title="Camera off">📹</span>}

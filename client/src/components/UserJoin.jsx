@@ -4,11 +4,13 @@ import './UserJoin.css';
 function UserJoin() {
     const [slotId, setSlotId] = useState('');
     const [name, setName] = useState('');
+    const [userType, setUserType] = useState('client'); // 'client' or 'lawyer'
 
     const handleJoin = (e) => {
         e.preventDefault();
         if (slotId.trim() && name.trim()) {
-            window.location.href = `/?s=${slotId.trim()}&n=${name.trim()}`;
+            const typeShort = userType === 'lawyer' ? 'l' : 'c';
+            window.location.href = `/?s=${slotId.trim()}&n=${name.trim()}&t=${typeShort}`;
         }
     };
 
@@ -36,6 +38,16 @@ function UserJoin() {
                             required
                             className="join-input"
                         />
+                    </div>
+                    <div className="form-group">
+                        <select
+                            value={userType}
+                            onChange={(e) => setUserType(e.target.value)}
+                            className="join-input"
+                        >
+                            <option value="client">Client (👤)</option>
+                            <option value="lawyer">Lawyer (🎓)</option>
+                        </select>
                     </div>
                     <button type="submit" className="join-button">
                         Join Meeting
