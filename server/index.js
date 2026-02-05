@@ -23,22 +23,27 @@ app.get('/', (req, res) => {
 const socketToRoom = {};
 // Map to track user name: socket.id -> name
 const socketToName = {};
+// Map to track user type: socket.id -> type (client/lawyer)
+const socketToType = {};
 // Map to track users in a room: roomID -> [socket.id, ...]
 const usersInRoom = {};
 
 io.on('connection', socket => {
     socket.on("join room", payload => {
-        let roomID, name;
+        let roomID, name, type;
         if (typeof payload === 'object') {
             roomID = payload.roomID;
             name = payload.name;
+            type = payload.type || 'client'; // Default to client if not provided
         } else {
             roomID = payload;
             name = "Guest";
+            type = 'client';
         }
 
-        console.log(`[${socket.id}] joining room ${roomID} as ${name}`);
+        console.log(`[${socket.id}] joining room ${roomID} as ${name} (${type})`);
         socketToName[socket.id] = name;
+        socketToType[socket.id] = type;
 
         if (usersInRoom[roomID]) {
             const length = usersInRoom[roomID].length;
@@ -53,10 +58,14 @@ io.on('connection', socket => {
         }
         socketToRoom[socket.id] = roomID;
 
-        // Prepare list of other users with their names
+        // Prepare list of other users with their names and types
         const usersInThisRoom = usersInRoom[roomID]
             .filter(id => id !== socket.id)
-            .map(id => ({ id, name: socketToName[id] }));
+            .map(id => ({
+                id,
+                name: socketToName[id],
+                type: socketToType[id]
+            }));
 
         console.log(`[${socket.id}] Sending 'all users': ${JSON.stringify(usersInThisRoom)}`);
         socket.emit("all users", usersInThisRoom);
@@ -65,10 +74,12 @@ io.on('connection', socket => {
     socket.on("sending signal", payload => {
         console.log(`[${socket.id}] sending signal to ${payload.userToSignal} (Caller: ${payload.callerID})`);
         const callerName = socketToName[payload.callerID] || "Guest";
+        const callerType = socketToType[payload.callerID] || "client";
         io.to(payload.userToSignal).emit('user joined', {
             signal: payload.signal,
             callerID: payload.callerID,
-            callerName: callerName
+            callerName: callerName,
+            callerType: callerType
         });
     });
 
@@ -86,6 +97,10 @@ io.on('connection', socket => {
             usersInRoom[roomID] = room;
             console.log(`Room ${roomID} updated members: ${JSON.stringify(room)}`);
         }
+        delete socketToName[socket.id];
+        delete socketToType[socket.id];
+        delete socketToRoom[socket.id];
+
         // Ideally emit a "user left" event here so clients can remove the video
         socket.broadcast.emit('user left', socket.id);
     });
