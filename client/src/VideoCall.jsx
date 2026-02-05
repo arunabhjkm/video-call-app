@@ -39,6 +39,16 @@ function VideoCall({ initialRoomId }) {
   const previewVideo = useRef();
   const peersRef = useRef([]);
   const streamRef = useRef();
+  const micRef = useRef(micOn);
+  const cameraRef = useRef(cameraOn);
+
+  useEffect(() => {
+    micRef.current = micOn;
+  }, [micOn]);
+
+  useEffect(() => {
+    cameraRef.current = cameraOn;
+  }, [cameraOn]);
 
   const [searchParams] = useSearchParams();
   const slotParam = searchParams.get('s') || searchParams.get('slot');
@@ -257,7 +267,7 @@ function VideoCall({ initialRoomId }) {
         userToSignal,
         callerID,
         signal,
-        callerStatus: { mic: micOn, camera: cameraOn }
+        callerStatus: { mic: micRef.current, camera: cameraRef.current }
       })
     })
 
@@ -284,7 +294,7 @@ function VideoCall({ initialRoomId }) {
       socket.emit("returning signal", {
         signal,
         callerID,
-        status: { mic: micOn, camera: cameraOn }
+        status: { mic: micRef.current, camera: cameraRef.current }
       })
     })
 
