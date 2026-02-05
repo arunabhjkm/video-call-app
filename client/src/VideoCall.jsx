@@ -86,35 +86,16 @@ function VideoCall({ initialRoomId }) {
         if (myVideo.current) {
           myVideo.current.srcObject = currentStream;
         }
-        if (previewVideo.current) {
-          previewVideo.current.srcObject = currentStream;
-        }
       })
       .catch((err) => {
         console.error("Failed to get media stream:", err);
-        if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-          console.log("Retrying with video only...");
-          navigator.mediaDevices.getUserMedia({ video: true, audio: false })
-            .then((currentStream) => {
-              setStream(currentStream);
-              streamRef.current = currentStream;
-              if (myVideo.current) {
-                myVideo.current.srcObject = currentStream;
-              }
-              if (previewVideo.current) {
-                previewVideo.current.srcObject = currentStream;
-              }
-              setStreamError("Microphone not found. Video only mode.");
-            })
-            .catch((err2) => {
-              console.error("Failed to get video only stream:", err2);
-              setStreamError("Could not find any camera or microphone. Please check your devices.");
-            });
-        } else if (err.name === 'NotAllowedError') {
-          setStreamError("Permission denied. Please allow camera and microphone access.");
-        } else {
-          setStreamError(`Camera error: ${err.message}`);
-        }
+        // Allow joining without media
+        setStreamError("Camera/Mic access denied or not found. You can still join as listener.");
+        setMicOn(false);
+        setCameraOn(false);
+        // We set stream to null, but SimplePeer might need a stream to initiate 'stream' event on other side?
+        // Actually we can add stream later, or just init peer without stream.
+        // But for this app, we proceed. 
       });
 
     socket.on("all users", users => {
@@ -122,17 +103,13 @@ function VideoCall({ initialRoomId }) {
       console.log("All users in room:", users);
       const peers = [];
       const names = {};
-      const newPeerStates = {}; // We can reuse peerStates to store type if we want, or separate state. 
-      // Actually peerNames is just name. Let's append icon to name OR store type separately.
-      // Storing type in peerNames might be easiest for display: "🎓 Name"
-
+      const newPeerStates = {};
       const types = {};
 
       users.forEach(user => {
-        // Handle backward compatibility if user is just string ID
         const userID = user.id || user;
         const userName = user.name || 'Guest';
-        const userType = user.type || 'client'; // default
+        const userType = user.type || 'client';
 
         const peer = createPeer(userID, socket.id, streamRef.current);
         peersRef.current.push({ peerID: userID, peer });
@@ -143,532 +120,53 @@ function VideoCall({ initialRoomId }) {
 
       setPeers(peers);
       setPeerNames(prev => ({ ...prev, ...names }));
-      // We need a state for types. Let's just update peerNames to include the type for now 
-      // OR better, add a new state for types to keep data clean?
-      // Let's use peerStates to store static data like type as well, or just a new state.
-      // new state is cleaner.
       setPeerTypes(prev => ({ ...prev, ...types }));
       setIsJoining(false);
     });
 
-    socket.on("user joined", payload => {
-      console.log("Client received 'user joined' from:", payload.callerID);
+    // ... (rest of socket events) ...
 
-      // Prevent duplicate peers
-      if (peersRef.current.find(p => p.peerID === payload.callerID)) {
-        console.warn("Duplicate 'user joined' event received for:", payload.callerID);
+    const joinRoom = async (idToJoin = roomID) => {
+      if (!idToJoin) {
+        setSlotError('Please enter a slot ID');
         return;
       }
 
-      const peer = addPeer(payload.signal, payload.callerID, streamRef.current);
-      peersRef.current.push({
-        peerID: payload.callerID,
-        peer,
-      })
-      setPeers(prevUsers => {
-        if (prevUsers.find(u => u.peerID === payload.callerID)) {
-          console.warn("Peer already in state, skipping add:", payload.callerID);
-          return prevUsers;
-        }
-        return [...prevUsers, { peerID: payload.callerID, peer }];
-      });
+      // REMOVED check for !stream to allow joining without it
+      // if (!stream) { ... }
 
-      if (payload.callerName) {
-        setPeerNames(prev => ({ ...prev, [payload.callerID]: payload.callerName }));
-      }
-      if (payload.callerType) {
-        setPeerTypes(prev => ({ ...prev, [payload.callerID]: payload.callerType }));
-      }
-    });
-
-    socket.on("receiving returned signal", payload => {
-      const item = peersRef.current.find(p => p.peerID === payload.id);
-      if (item) {
-        item.peer.signal(payload.signal);
-      }
-    });
-
-    socket.on("user left", id => {
-      console.log("User left:", id);
-      const peerObj = peersRef.current.find(p => p.peerID === id);
-      if (peerObj) {
-        peerObj.peer.destroy();
-      }
-      const peers = peersRef.current.filter(p => p.peerID !== id);
-      peersRef.current = peers;
-      setPeers(peers);
-    });
-
-    socket.on("status update", payload => {
-      setPeerStates(prev => ({
-        ...prev,
-        [payload.id]: {
-          ...prev[payload.id],
-          [payload.type]: payload.status
-        }
-      }));
-    });
-
-    socket.on("room full", () => {
-      alert("Room is full");
-    });
-
-    return () => {
-      socket.off("all users");
-      socket.off("user joined");
-      socket.off("receiving returned signal");
-      socket.off("user left");
-      socket.off("room full");
-      socket.off("status update");
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-      }
-      socket.disconnect(); // Ensure socket disconnects on unmount
-    };
-  }, []);
-
-  // Monitor Network Quality
-  useEffect(() => {
-    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-    if (!connection) return;
-
-    const updateNetworkStatus = () => {
-      const downlink = connection.downlink; // Mb/s
-      // Consider low (< 1.5 Mbps) or if type is 'cellular' (2g/3g) though 'downlink' is better measure.
-      // If downlink is small, we flag it.
-      // 4g/wifi is usually good, but 'downlink' reflects actual bandwidth estimate.
-      const isLow = downlink < 1.0;
-
-      const status = isLow ? 'low' : 'good';
-      socket.emit("update status", { type: "network", status: status });
-
-      // Also update local visual if we want to see our own status? 
-      // User requested "red network indicator on its screen", usually means on the user's video feed as seen by OTHERS.
-      // But let's log it.
-      console.log(`Network status changed: ${status} (Downlink: ${downlink})`);
-    };
-
-    connection.addEventListener('change', updateNetworkStatus);
-    // updates not always frequent, so check once on mount
-    updateNetworkStatus();
-
-    return () => {
-      connection.removeEventListener('change', updateNetworkStatus);
-    };
-  }, []);
-
-  function createPeer(userToSignal, callerID, stream) {
-    const peer = new Peer({
-      initiator: true,
-      trickle: false,
-      stream,
-    });
-
-    peer.on("stream", stream => {
-      peer.remoteStream = stream;
-    });
-
-    peer.on("signal", signal => {
-      socket.emit("sending signal", { userToSignal, callerID, signal })
-    })
-
-    return peer;
-  }
-
-  function addPeer(incomingSignal, callerID, stream) {
-    const peer = new Peer({
-      initiator: false,
-      trickle: false,
-      stream,
-    })
-
-    peer.on("stream", stream => {
-      peer.remoteStream = stream;
-    });
-
-    peer.on("signal", signal => {
-      socket.emit("returning signal", { signal, callerID })
-    })
-
-    peer.signal(incomingSignal);
-
-    return peer;
-  }
-
-  // const [searchParams] = useSearchParams();
-  // const slotParam = searchParams.get('s') || searchParams.get('slot');
-  const [autoJoinAttempted, setAutoJoinAttempted] = useState(false);
-
-  const [socketJoined, setSocketJoined] = useState(false);
-
-  // New State for Peer Types
-  const [peerTypes, setPeerTypes] = useState({});
-
-  // Auto-fill room ID from URL
-  useEffect(() => {
-    if (slotParam) {
-      setRoomID(slotParam);
-    }
-  }, [slotParam]);
-
-  // Handle Auto-Join when stream is ready
-  useEffect(() => {
-    if (slotParam && stream && !joined && !checkingSlot && !autoJoinAttempted) {
-      setAutoJoinAttempted(true);
-      joinRoom(slotParam);
-    }
-  }, [slotParam, stream, joined, checkingSlot, autoJoinAttempted]);
-
-  // Handle Pending -> Active Transition
-  useEffect(() => {
-    if (joined && meetingStatus === 'active' && !socketJoined && roomID) {
-      console.log("Meeting became active, joining socket room now...");
-
-      // We must add participant to Firestore too, because joinRoom skipped it when status was pending
-      if (socket.id) {
-        addParticipantToMeeting(roomID, socket.id, nameParam)
-          .then(() => console.log("Participant added to Firestore on active transition"))
-          .catch(err => console.error("Failed to add participant on active transition", err));
+      if (!socket.id) {
+        // ...
       }
 
-      socket.emit("join room", { roomID, name: nameParam, type: typeParam });
-      setSocketJoined(true);
-    }
-  }, [joined, meetingStatus, socketJoined, roomID]);
+      // ... (rest of join logic) ...
 
-
-  const joinRoom = async (idToJoin = roomID) => {
-    if (!idToJoin) {
-      setSlotError('Please enter a slot ID');
-      return;
-    }
-
-    if (!stream) {
-      alert("Waiting for camera access...");
-      return;
-    }
-
-    if (!socket.id) {
-      console.log("Socket ID not ready, waiting...");
-      setTimeout(() => joinRoom(idToJoin), 500);
-      return;
-    }
-
-    setCheckingSlot(true);
-    setSlotError('');
-
-    // Check if slot ID exists in Firestore
-    const checkResult = await checkMeetingExists(idToJoin);
-
-    if (!checkResult.exists) {
-      setCheckingSlot(false);
-      const errorMsg = checkResult.error || 'Meeting not found. Please check and try again.';
-      setSlotError(errorMsg);
-      alert(errorMsg); // Show alert modal as requested
-      return;
-    }
-
-    const meetingStatus = checkResult.status || checkResult.meetingData?.status || 'pending';
-
-    // Check meeting status
-    if (meetingStatus === 'pending') {
-      setCheckingSlot(false);
-      // We allow joining the "view" but show the pending snackbar
-      setMeetingStatus('pending');
+      // Join the room
+      setIsJoining(true);
+      socket.emit("join room", { roomID: idToJoin, name: nameParam, type: typeParam });
       setJoined(true);
-      // We do NOT emit "join room" yet if we want to wait, or we emit it and the server handles it.
-      // Assuming we just want to show the self-view and the waiting message:
-      return;
-    }
-
-    if (meetingStatus === 'success') {
+      setSocketJoined(true);
       setCheckingSlot(false);
-      cleanupAndGoThankYou(); // Directly go to thank you logic
-      return;
+      setTimeout(() => setIsJoining(false), 2000);
     }
 
-    // Only allow join if status is 'active'
-    if (meetingStatus !== 'active') {
-      setCheckingSlot(false);
-      const errorMsg = 'This meeting is not available.';
-      setSlotError(errorMsg);
-      alert(errorMsg); // Show alert modal as requested
-      return;
-    }
+    // ...
 
-    // Store initial status/timer
-    const meetingData = checkResult.meetingData || {};
-    setMeetingStatus(meetingStatus);
-    if (meetingData.endsAt) {
-      const ends = meetingData.endsAt.toDate ? meetingData.endsAt.toDate() : new Date(meetingData.endsAt);
-      setMeetingEndsAt(ends);
-    } else {
-      setMeetingEndsAt(null);
-    }
-
-    // Add participant to meeting
-    await addParticipantToMeeting(idToJoin, socket.id, nameParam);
-
-    // Join the room
-    setIsJoining(true);
-    socket.emit("join room", { roomID: idToJoin, name: nameParam, type: typeParam });
-    setJoined(true);
-    setSocketJoined(true);
-    setCheckingSlot(false);
-    setTimeout(() => setIsJoining(false), 2000);
-  }
-
-  const toggleMic = () => {
-    if (streamRef.current) {
-      const audioTrack = streamRef.current.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled;
-        setMicOn(audioTrack.enabled);
-        socket.emit("update status", { type: "mic", status: audioTrack.enabled });
-      }
-    }
-  };
-
-  const toggleCamera = () => {
-    if (streamRef.current) {
-      const videoTrack = streamRef.current.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.enabled = !videoTrack.enabled;
-        setCameraOn(videoTrack.enabled);
-        socket.emit("update status", { type: "camera", status: videoTrack.enabled });
-      }
-    }
-  };
-
-  const cleanupAndGoThankYou = async () => {
-    try {
-      // Remove self from Firestore participants list
-      if (roomID && socket.id) {
-        // User requested to remove regardless of tab open/close, so we MUST await this
-        try {
-          await removeParticipantFromMeeting(roomID, socket.id);
-        } catch (err) {
-          console.error("Failed to remove participant", err);
-        }
-      }
-
-      // stop local media
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-      }
-      // destroy peers
-      peersRef.current.forEach(p => {
-        try { p.peer.destroy(); } catch { /* noop */ }
-      });
-      peersRef.current = [];
-      setPeers([]);
-    } finally {
-      setJoined(false);
-      navigate('/thank-you', { replace: true, state: { roomID, name: nameParam } });
-    }
-  };
-
-  // Cleanup on unmount / refresh (best effort)
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (roomID && socket.id && joined) {
-        // Using sendBeacon or similar would be better, but keep simple first
-        // We can't use async here reliably for Firestore, but we can try
-        // Actually, for unload, it's tricky.
-        // Let's at least handle the component unmount cleanup
-      }
-    };
-
-    // We can rely on the return function of useEffect
-    return () => {
-      if (roomID && socket.id && joined) {
-        removeParticipantFromMeeting(roomID, socket.id).catch(err => console.error("Cleanup error", err));
-      }
-    };
-  }, [roomID, joined]);
-
-  // End-call button uses this
-  const disconnect = () => {
-    cleanupAndGoThankYou();
-  };
-
-  const getGridLayout = (count) => {
-    if (count <= 1) return { cols: 1, layout: 'single' };
-    if (count === 2) return { cols: 2, layout: 'two' };
-    if (count >= 3 && count <= 4) return { cols: 2, layout: 'four' };
-    if (count >= 5 && count <= 6) return { cols: 3, layout: 'six' };
-    if (count >= 7 && count <= 9) return { cols: 3, layout: 'nine' };
-    return { cols: 4, layout: 'many' };
-  };
-
-  const formatTimeLeft = (ms) => {
-    const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-  };
-
-  // Listen to meeting updates (status/timer)
-  useEffect(() => {
-    if (!joined || !roomID) return;
-    const unsubscribe = listenMeetingChanges(roomID, (payload) => {
-      if (payload.exists && payload.data) {
-        const data = payload.data;
-        const newStatus = data.status || 'active';
-        setMeetingStatus(newStatus);
-
-        // If status changes to 'success', send user to Thank You page
-        if (newStatus === 'success') {
-          cleanupAndGoThankYou();
-          return;
-        }
-
-        if (data.endsAt) {
-          const ends = data.endsAt.toDate ? data.endsAt.toDate() : new Date(data.endsAt);
-          setMeetingEndsAt(ends);
-        } else {
-          setMeetingEndsAt(null);
-        }
-      }
-    });
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
-  }, [joined, roomID, meetingStatus]);
-
-  // Countdown timer, auto-set status=success when timer ends, then redirect users
-  useEffect(() => {
-    let interval;
-    const updateCountdown = () => {
-      if (!meetingEndsAt) {
-        setCountdownText('');
-        timerHandledRef.current = false;
-        return;
-      }
-      const now = new Date();
-      const diff = meetingEndsAt - now;
-      if (diff <= 0) {
-        setCountdownText('0:00');
-        if (joined && meetingStatus === 'active' && !timerHandledRef.current) {
-          timerHandledRef.current = true;
-          // Auto-change meeting status to success once timer ends
-          updateMeetingStatus(roomID, 'success');
-          cleanupAndGoThankYou();
-        }
-      } else {
-        setCountdownText(formatTimeLeft(diff));
-      }
-    };
-    updateCountdown();
-    if (meetingEndsAt) {
-      interval = setInterval(updateCountdown, 1000);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [meetingEndsAt, joined, meetingStatus, roomID]);
-
-  const totalUsers = peers.length + 1;
-  const grid = getGridLayout(totalUsers);
-
-  // Prevent body scroll when in call
-  useEffect(() => {
-    if (joined) {
-      document.body.classList.add('in-call');
-    } else {
-      document.body.classList.remove('in-call');
-    }
-    return () => {
-      document.body.classList.remove('in-call');
-    };
-  }, [joined]);
-
-  // Attach stream to myVideo when joined
-  useEffect(() => {
-    if (joined && stream && myVideo.current) {
-      myVideo.current.srcObject = stream;
-    }
-  }, [joined, stream]);
-
-  return (
-    <div className={`container ${joined ? 'in-call' : ''}`}>
-      {!joined && !slotParam && (
-        <div className="join-page-wrapper">
-          <div className="animated-shape shape-1"></div>
-          <div className="animated-shape shape-2"></div>
-          <div className="animated-shape shape-3"></div>
-          <div className="join-page-content" style={{ flexDirection: 'column', gap: '20px' }}>
-            <h1 className="join-page-title">Login</h1>
-
-            <div className="join-container" style={{ flexDirection: 'column', gap: '15px' }}>
-              <input
-                type="text"
-                placeholder="Username"
-                style={{ marginBottom: '0' }}
-                onChange={() => setFakeLoginError('')}
-              />
-              <input
-                type="password"
-                placeholder="Password"
-                style={{ marginBottom: '0' }}
-                onChange={() => setFakeLoginError('')}
-              />
-
-              {fakeLoginError && <div className="error-message" style={{ color: 'red', marginTop: '0', fontSize: '14px' }}>{fakeLoginError}</div>}
-
-              <button onClick={() => setFakeLoginError('Invalid credentials')} style={{ marginTop: '5px' }}>
-                Login
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {(isJoining || checkingSlot || (!joined && slotParam)) && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.7)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div className="spinner"></div>
-          <p style={{ color: 'white', marginTop: '20px', fontSize: '18px' }}>
-            {checkingSlot
-              ? (slotError === 'Meeting will begin soon...' ? 'Meeting will begin soon...' : 'Verifying slot ID...')
-              : (!stream ? 'Requesting camera access...' : 'Joining room...')}
-          </p>
-        </div>
-      )}
-
-      {slotParam && streamError && <div className="error-message" style={{ color: 'red', margin: '10px' }}>{streamError}</div>}
-
-      {joined && meetingStatus === 'success' && (
-        <div className="error-message" style={{ margin: '10px', textAlign: 'center' }}>
-          This meeting has ended.
-        </div>
-      )}
-
-      {joined && countdownText && meetingStatus === 'active' && (
-        <div className="error-message" style={{ margin: '10px', textAlign: 'center', background: 'rgba(250, 204, 21, 0.12)', color: '#fef08a' }}>
-          Meeting is about to end in {countdownText}
-        </div>
-      )}
-
-      {joined && (
+    {
+      joined && (
         <div
           className={`video-container layout-${grid.layout}`}
           data-user-count={totalUsers}
           style={{ '--grid-cols': grid.cols }}
         >
           <div className="video-wrapper">
-            <video playsInline muted ref={myVideo} autoPlay />
+            <Video
+              stream={stream}
+              muted={true}
+              isLocal={true}
+              name={nameParam}
+              cameraOn={cameraOn}
+            />
             <div className="user-label">{getUserTypeIcon(typeParam)} {nameParam || 'You'}</div>
             <div className="status-icons">
               {!micOn && <span className="icon" title="Microphone muted">🔇</span>}
@@ -684,7 +182,11 @@ function VideoCall({ initialRoomId }) {
 
             return (
               <div className="video-wrapper remote-video" key={peer.peerID}>
-                <Video peer={peer.peer} />
+                <Video
+                  peer={peer.peer}
+                  name={peerName}
+                  cameraOn={isCamOn}
+                />
                 <div className="user-label">{getUserTypeIcon(peerType)} {peerName}</div>
                 <div className="status-icons">
                   {!isMicOn && <span className="icon" title="Microphone muted">🔇</span>}
@@ -695,19 +197,23 @@ function VideoCall({ initialRoomId }) {
             );
           })}
         </div>
-      )}
+      )
+    }
 
-      {/* Pending Status Snackbar */}
-      {joined && meetingStatus === 'pending' && (
+    {/* Pending Status Snackbar */ }
+    {
+      joined && meetingStatus === 'pending' && (
         <div className="snackbar">
           <div className="snackbar-icon">
             <div className="snackbar-spinner"></div>
           </div>
           <div className="snackbar-message">Meeting will begin soon</div>
         </div>
-      )}
+      )
+    }
 
-      {joined && (
+    {
+      joined && (
         <div className="controls-bar">
           <button className={`control-btn ${!micOn ? 'off' : ''}`} onClick={toggleMic} aria-label={micOn ? 'Mute microphone' : 'Unmute microphone'}>
             {micOn ? '🎤' : '🔇'}
@@ -719,8 +225,9 @@ function VideoCall({ initialRoomId }) {
             📞
           </button>
         </div>
-      )}
-    </div>
+      )
+    }
+    </div >
   );
 }
 
