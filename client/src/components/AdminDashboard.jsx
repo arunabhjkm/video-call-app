@@ -71,7 +71,7 @@ function AdminDashboard({ adminData }) {
   };
 
   const handleJoinMeeting = (roomId) => {
-    window.location.href = `/?s=${roomId}&name=Admin&t=l`;
+    window.location.href = `/?s=${roomId}&name=Admin`;
   };
 
   const handleCopyLink = async (slotId) => {
