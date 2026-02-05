@@ -24,7 +24,8 @@ const socketToRoom = {};
 // Map to track user name: socket.id -> name
 const socketToName = {};
 // Map to track user type: socket.id -> type (client/lawyer)
-const socketToType = {};
+// Map to track user status: socket.id -> { mic: boolean, camera: boolean }
+const socketToStatus = {};
 // Map to track users in a room: roomID -> [socket.id, ...]
 const usersInRoom = {};
 
@@ -44,6 +45,9 @@ io.on('connection', socket => {
         console.log(`[${socket.id}] joining room ${roomID} as ${name} (${type})`);
         socketToName[socket.id] = name;
         socketToType[socket.id] = type;
+        // Initialize status (assume on by default, or client should send it? Client sends it via sidebar updates usually, but initially we assume ON unless told otherwise)
+        // Better: Initialize to true, but client should emit update immediately if false.
+        socketToStatus[socket.id] = { mic: true, camera: true };
 
         if (usersInRoom[roomID]) {
             const length = usersInRoom[roomID].length;
@@ -64,7 +68,8 @@ io.on('connection', socket => {
             .map(id => ({
                 id,
                 name: socketToName[id],
-                type: socketToType[id]
+                type: socketToType[id],
+                status: socketToStatus[id] // Include status
             }));
 
         console.log(`[${socket.id}] Sending 'all users': ${JSON.stringify(usersInThisRoom)}`);
@@ -75,12 +80,14 @@ io.on('connection', socket => {
         console.log(`[${socket.id}] sending signal to ${payload.userToSignal} (Caller: ${payload.callerID})`);
         const callerName = socketToName[payload.callerID] || "Guest";
         const callerType = socketToType[payload.callerID] || "client";
+        const callerStatus = socketToStatus[payload.callerID]; // Use server status as fallback or primary?
+
         io.to(payload.userToSignal).emit('user joined', {
             signal: payload.signal,
             callerID: payload.callerID,
             callerName: callerName,
             callerType: callerType,
-            callerStatus: payload.callerStatus // Pass MIC/CAM status
+            callerStatus: payload.callerStatus || callerStatus // Prefer payload, fallback to server
         });
     });
 
@@ -105,6 +112,7 @@ io.on('connection', socket => {
         delete socketToName[socket.id];
         delete socketToType[socket.id];
         delete socketToRoom[socket.id];
+        delete socketToStatus[socket.id];
 
         // Ideally emit a "user left" event here so clients can remove the video
         socket.broadcast.emit('user left', socket.id);
@@ -112,6 +120,14 @@ io.on('connection', socket => {
 
     socket.on("update status", payload => {
         const roomID = socketToRoom[socket.id];
+
+        // Update server state
+        if (!socketToStatus[socket.id]) {
+            socketToStatus[socket.id] = { mic: true, camera: true };
+        }
+        socketToStatus[socket.id][payload.type] = payload.status;
+        console.log(`[${socket.id}] Updated status: ${payload.type}=${payload.status}`);
+
         if (roomID) {
             // Broadcast to everyone else in the room
             socket.to(roomID).emit("status update", {

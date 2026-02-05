@@ -100,28 +100,32 @@ function VideoCall({ initialRoomId }) {
     }
 
     socket.on("all users", users => {
-      // Users is now array of {id, name, type}
+      // Users is now array of {id, name, type, status}
       console.log("All users in room:", users);
       const peers = [];
       const names = {};
       const types = {};
+      const states = {};
 
       users.forEach(user => {
         // Handle backward compatibility if user is just string ID
         const userID = user.id || user;
         const userName = user.name || 'Guest';
         const userType = user.type || 'client'; // default
+        const userStatus = user.status || { mic: true, camera: true }; // default
 
         const peer = createPeer(userID, socket.id, streamRef.current);
         peersRef.current.push({ peerID: userID, peer });
         peers.push({ peerID: userID, peer });
         names[userID] = userName;
         types[userID] = userType;
+        states[userID] = userStatus;
       });
 
       setPeers(peers);
       setPeerNames(prev => ({ ...prev, ...names }));
       setPeerTypes(prev => ({ ...prev, ...types }));
+      setPeerStates(prev => ({ ...prev, ...states }));
       setIsJoining(false);
     });
 
@@ -411,6 +415,15 @@ function VideoCall({ initialRoomId }) {
     setSocketJoined(true);
     setCheckingSlot(false);
     setTimeout(() => setIsJoining(false), 2000);
+
+    // If joining as listener or with media OFF, we should sync that state to server immediately
+    // because server defaults to TRUE
+    if (!micOn) {
+      socket.emit("update status", { type: "mic", status: false });
+    }
+    if (!cameraOn) {
+      socket.emit("update status", { type: "camera", status: false });
+    }
   }
 
   const toggleMic = () => {
