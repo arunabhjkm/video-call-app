@@ -48,7 +48,7 @@ function VideoCall({ initialRoomId }) {
   const getUserTypeIcon = (typeString) => {
     if (!typeString) return '👤';
     const t = typeString.toLowerCase();
-    if (t === 'l' || t === 'lawyer') return '🎓';
+    if (t === 'l' || t === 'lawyer') return '🧑‍⚖️';
     return '👤';
   };
 
