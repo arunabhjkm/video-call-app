@@ -40,6 +40,7 @@ function VideoCall({ initialRoomId }) {
   const peersRef = useRef([]);
   const streamRef = useRef();
 
+  const [searchParams] = useSearchParams();
   const slotParam = searchParams.get('s') || searchParams.get('slot');
   const nameParam = searchParams.get('n') || searchParams.get('name') || 'Guest';
   const typeParam = searchParams.get('t') || searchParams.get('type') || 'client'; // 'c' or 'l' or full string
