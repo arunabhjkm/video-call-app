@@ -258,6 +258,8 @@ body.in-call {
 .container.in-call .video-container.layout-single {
   height: 100vh;
   padding-bottom: 0;
+  max-width: 100%;
+  /* Override the 900px limit */
 }
 
 .video-wrapper:hover {
