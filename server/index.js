@@ -24,6 +24,7 @@ const socketToRoom = {};
 // Map to track user name: socket.id -> name
 const socketToName = {};
 // Map to track user type: socket.id -> type (client/lawyer)
+const socketToType = {};
 // Map to track user status: socket.id -> { mic: boolean, camera: boolean }
 const socketToStatus = {};
 // Map to track users in a room: roomID -> [socket.id, ...]
