@@ -50,6 +50,8 @@ body.in-call {
   min-height: 100vh;
   height: 100vh;
   overflow: hidden;
+  width: 100vw;
+  max-width: none;
 }
 
 /* --- Join Room Card (Glassmorphism) --- */
@@ -814,6 +816,10 @@ body.in-call {
     padding: 10px;
     padding-bottom: 90px;
     height: calc(100vh - 90px);
+    justify-items: stretch;
+    /* Ensure videos stretch to fill column */
+    max-width: 100%;
+    width: 100%;
   }
 
   .container.in-call .video-container.layout-single {
@@ -823,6 +829,7 @@ body.in-call {
 
   .container.in-call .video-container.layout-single .video-wrapper {
     height: calc(100vh - 90px);
+    aspect-ratio: unset;
   }
 
   .container.in-call .video-container.layout-two {
@@ -831,8 +838,9 @@ body.in-call {
   }
 
   .container.in-call .video-container.layout-two .video-wrapper {
-    aspect-ratio: 16/9;
+    /* aspect-ratio: 16/9;  Removed to allow stretch */
     height: calc((100vh - 90px - 10px) / 2);
+    width: 100%;
   }
 
   .container.in-call .video-container.layout-four {
@@ -841,8 +849,9 @@ body.in-call {
   }
 
   .container.in-call .video-container.layout-four .video-wrapper {
-    aspect-ratio: 4/3;
+    /* aspect-ratio: 4/3; Removed to allow stretch */
     height: calc((100vh - 90px - 10px) / 2);
+    width: 100%;
   }
 
   .container.in-call .video-container.layout-six {
@@ -851,8 +860,9 @@ body.in-call {
   }
 
   .container.in-call .video-container.layout-six .video-wrapper {
-    aspect-ratio: 4/3;
+    /* aspect-ratio: 4/3; Removed to allow stretch */
     height: calc((100vh - 90px - 20px) / 3);
+    width: 100%;
   }
 }
 
