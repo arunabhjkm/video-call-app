@@ -8,7 +8,10 @@ import { checkMeetingExists, addParticipantToMeeting, removeParticipantFromMeeti
 
 // Polyfills handled by vite-plugin-node-polyfills
 
-const SERVER_URL = 'https://video-call-app-4xz9.onrender.com';
+// server address is provided by VITE_API_URL; it will be swapped
+// according to the active .env file.  a simple default keeps localhost
+// development working in case the variable is missing.
+const SERVER_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 const socket = io(SERVER_URL);
 
 function VideoCall({ initialRoomId }) {
