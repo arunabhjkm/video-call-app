@@ -27,6 +27,7 @@ function VideoCall({ initialRoomId }) {
   const [meetingStatus, setMeetingStatus] = useState('active');
   const [meetingEndsAt, setMeetingEndsAt] = useState(null);
   const [countdownText, setCountdownText] = useState('');
+  const [meetingErrorModal, setMeetingErrorModal] = useState('');
   const timerHandledRef = useRef(false);
 
   // Controls State
@@ -223,7 +224,7 @@ function VideoCall({ initialRoomId }) {
     });
 
     socket.on("room full", () => {
-      alert("Room is full");
+      setMeetingErrorModal("This room is already full.");
     });
 
     return () => {
@@ -388,9 +389,7 @@ function VideoCall({ initialRoomId }) {
 
     if (!checkResult.exists) {
       setCheckingSlot(false);
-      const errorMsg = checkResult.error || 'Meeting not found. Please check and try again.';
-      setSlotError(errorMsg);
-      alert(errorMsg); // Show alert modal as requested
+      setMeetingErrorModal('Oops! Meeting not found.');
       return;
     }
 
@@ -414,9 +413,7 @@ function VideoCall({ initialRoomId }) {
     // Only allow join if status is 'active'
     if (meetingStatus !== 'active') {
       setCheckingSlot(false);
-      const errorMsg = 'This meeting is not available.';
-      setSlotError(errorMsg);
-      alert(errorMsg); // Show alert modal as requested
+      setMeetingErrorModal('This meeting is no longer available.');
       return;
     }
 
@@ -650,7 +647,7 @@ function VideoCall({ initialRoomId }) {
         </div>
       )}
 
-      {(isJoining || checkingSlot || (!joined && slotParam && !streamError)) && (
+      {(isJoining || checkingSlot || (!joined && slotParam && !streamError && !meetingErrorModal)) && (
         <div style={{
           position: 'fixed',
           top: 0,
@@ -670,6 +667,61 @@ function VideoCall({ initialRoomId }) {
               ? (slotError === 'Meeting will begin soon...' ? 'Meeting will begin soon...' : 'Verifying slot ID...')
               : (!stream && !streamError ? 'Requesting microphone access...' : 'Joining room...')}
           </p>
+        </div>
+      )}
+
+      {meetingErrorModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.85)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2000,
+          backdropFilter: 'blur(5px)'
+        }}>
+          <div style={{
+            background: 'linear-gradient(145deg, #1e1e1e, #2a2a2a)',
+            padding: '40px 30px',
+            borderRadius: '16px',
+            textAlign: 'center',
+            maxWidth: '400px',
+            width: '90%',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+            animation: 'fadeIn 0.3s ease-out'
+          }}>
+            <div style={{ fontSize: '56px', marginBottom: '20px' }}>🚨</div>
+            <h2 style={{ color: 'white', margin: '0 0 15px 0', fontSize: '24px', fontWeight: '600' }}>{meetingErrorModal}</h2>
+            <p style={{ color: '#aaa', marginBottom: '30px', fontSize: '15px', lineHeight: '1.5' }}>
+              We couldn't connect you to this room. You will be redirected to the home page.
+            </p>
+            <button 
+              onClick={() => navigate('/')}
+              style={{
+                background: '#4CAF50',
+                color: 'white',
+                border: 'none',
+                padding: '14px 24px',
+                borderRadius: '8px',
+                fontSize: '16px',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+                width: '100%',
+                transition: 'background 0.2s',
+                boxShadow: '0 4px 12px rgba(76, 175, 80, 0.3)'
+              }}
+              onMouseOver={(e) => e.target.style.background = '#45a049'}
+              onMouseOut={(e) => e.target.style.background = '#4CAF50'}
+            >
+              Go to Home Page
+            </button>
+          </div>
         </div>
       )}
 
