@@ -87,10 +87,9 @@ function VideoCall({ initialRoomId }) {
       return;
     }
 
-    // Try to get media, but allow failure
+    // Try to get media (microphone is mandatory, camera is optional)
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setStreamError("Camera access requires a secure connection (HTTPS) or use localhost.");
-      // We continue without stream
+      setStreamError("Microphone access requires a secure connection (HTTPS) or use localhost.");
     } else {
       navigator.mediaDevices.getUserMedia({ video: true, audio: true })
         .then((currentStream) => {
@@ -104,11 +103,26 @@ function VideoCall({ initialRoomId }) {
           }
         })
         .catch((err) => {
-          console.error("Failed to get media stream:", err);
-          // Allow joining without media
-          setStreamError("Camera/Mic access denied or not found. You can still join using the listener mode.");
-          setMicOn(false);
-          setCameraOn(false);
+          console.warn("Failed to get both video and audio, trying audio only:", err);
+          navigator.mediaDevices.getUserMedia({ video: false, audio: true })
+            .then((audioStream) => {
+              setStream(audioStream);
+              streamRef.current = audioStream;
+              if (myVideo.current) {
+                myVideo.current.srcObject = audioStream;
+              }
+              if (previewVideo.current) {
+                previewVideo.current.srcObject = audioStream;
+              }
+              // Camera is explicitly off since we only got audio
+              setCameraOn(false);
+            })
+            .catch((audioErr) => {
+              console.error("Failed to get audio stream:", audioErr);
+              setStreamError("Microphone access is required to join the call.");
+              setMicOn(false);
+              setCameraOn(false);
+            });
         });
     }
 
@@ -320,18 +334,16 @@ function VideoCall({ initialRoomId }) {
     }
   }, [slotParam]);
 
-  // Handle Auto-Join when stream is ready OR if allow no media
+  // Handle Auto-Join when stream is ready
   useEffect(() => {
-    // We allow joining even if stream is null (optional media)
+    // We only allow joining if stream is present, as mic is mandatory
     if (slotParam && !joined && !checkingSlot && !autoJoinAttempted) {
-      // Check if we have determined stream status (either have stream or have error)
-      // Since getUserMedia is async, we don't want to join immediately on mount if we are waiting for permission
-      // But we don't have a reliable 'loading' state for media right now other than !stream and !streamError
-      // Let's add a small delay or check?
-      // For now, if stream is present OR streamError is present (permission denied), we proceed.
-      if (stream || streamError) {
+      if (stream) {
         setAutoJoinAttempted(true);
         joinRoom(slotParam);
+      } else if (streamError) {
+        // Prevent joining if there's a stream error, as mic is required
+        setAutoJoinAttempted(true);
       }
     }
   }, [slotParam, stream, streamError, joined, checkingSlot, autoJoinAttempted]);
@@ -638,7 +650,7 @@ function VideoCall({ initialRoomId }) {
         </div>
       )}
 
-      {(isJoining || checkingSlot || (!joined && slotParam)) && (
+      {(isJoining || checkingSlot || (!joined && slotParam && !streamError)) && (
         <div style={{
           position: 'fixed',
           top: 0,
@@ -656,12 +668,25 @@ function VideoCall({ initialRoomId }) {
           <p style={{ color: 'white', marginTop: '20px', fontSize: '18px' }}>
             {checkingSlot
               ? (slotError === 'Meeting will begin soon...' ? 'Meeting will begin soon...' : 'Verifying slot ID...')
-              : (!stream && !streamError ? 'Requesting camera access...' : 'Joining room...')}
+              : (!stream && !streamError ? 'Requesting microphone access...' : 'Joining room...')}
           </p>
         </div>
       )}
 
-      {slotParam && streamError && <div className="error-message" style={{ color: 'red', margin: '10px' }}>{streamError}</div>}
+      {slotParam && streamError && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', width: '100%' }}>
+          <div className="error-message" style={{ color: '#ff4d4f', padding: '20px', background: 'rgba(255, 77, 79, 0.1)', borderRadius: '8px', border: '1px solid rgba(255, 77, 79, 0.3)', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '15px', alignItems: 'center' }}>
+            <p style={{ margin: 0, fontSize: '1.2rem', fontWeight: '500' }}>{streamError}</p>
+            <p style={{ margin: 0, color: '#aaa' }}>Please check your browser permissions to allow microphone access.</p>
+            <button 
+              onClick={() => window.location.reload()}
+              style={{ padding: '10px 20px', background: '#ff4d4f', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+            >
+              Retry & Reload
+            </button>
+          </div>
+        </div>
+      )}
 
       {joined && meetingStatus === 'success' && (
         <div className="error-message" style={{ margin: '10px', textAlign: 'center' }}>
