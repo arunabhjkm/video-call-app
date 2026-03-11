@@ -242,14 +242,24 @@ function AdminDashboard({ adminData }) {
       setLoadingMeetings(true);
       const result = await getAdminMeetings(adminEmail);
       if (result.success) {
-        setMeetings(result.meetings);
+        const sorted = (result.meetings || []).sort((a, b) => {
+          const tA = a.createdAt?.seconds || 0;
+          const tB = b.createdAt?.seconds || 0;
+          return tB - tA;
+        });
+        setMeetings(sorted);
       }
       setLoadingMeetings(false);
 
       // Real-time listener
       unsubscribe = listenAdminMeetings(adminEmail, (payload) => {
         if (payload.success) {
-          setMeetings(payload.meetings);
+          const sorted = (payload.meetings || []).sort((a, b) => {
+            const tA = a.createdAt?.seconds || 0;
+            const tB = b.createdAt?.seconds || 0;
+            return tB - tA;
+          });
+          setMeetings(sorted);
         }
       });
     })();
