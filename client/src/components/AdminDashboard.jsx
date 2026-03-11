@@ -1,7 +1,223 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createMeeting, getAdminMeetings, updateMeetingStatus, setMeetingTimer, listenAdminMeetings } from '../services/firebaseService';
 import './AdminDashboard.css';
+
+// ─── LiveClock ────────────────────────────────────────────────────────────────
+function LiveClock() {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <span className="modal-clock">
+      {now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+    </span>
+  );
+}
+
+// ─── CopyLinkDropdown ─────────────────────────────────────────────────────────
+function CopyLinkDropdown({ slotId, onCopy, variant = 'text' }) {
+  const [open, setOpen] = useState(false);
+  const ref = React.useRef(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const handle = (type) => {
+    onCopy(slotId, type);
+    setOpen(false);
+  };
+
+  const isIcon = variant === 'icon';
+
+  return (
+    <div className={`copy-dropdown-wrapper ${isIcon ? 'icon-variant' : ''} ${open ? 'open' : ''}`} ref={ref}>
+      <button
+        className={`copy-link-button copy-link-toggle ${isIcon ? 'icon-button' : ''}`}
+        onClick={() => setOpen(o => !o)}
+        type="button"
+        title="Copy Joining Link"
+      >
+        {isIcon ? (
+          <>📋<span className="dropdown-arrow">{open ? '▲' : '▼'}</span></>
+        ) : (
+          <>📋 Copy Joining Link&nbsp;<span className="dropdown-arrow">{open ? '▲' : '▼'}</span></>
+        )}
+      </button>
+      {open && (
+        <div className={`copy-dropdown-menu ${isIcon ? 'menu-right' : ''}`}>
+          <button className="copy-dropdown-item" onClick={() => handle('c')}>
+            <span className="copy-type-icon">👤</span>
+            <span className="copy-item-text">
+              <strong>Client Link</strong>
+              <small>?s={slotId}&amp;t=c</small>
+            </span>
+          </button>
+          <button className="copy-dropdown-item" onClick={() => handle('l')}>
+            <span className="copy-type-icon">⚖️</span>
+            <span className="copy-item-text">
+              <strong>Lawyer Link</strong>
+              <small>?s={slotId}&amp;t=l</small>
+            </span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── MeetingModal ─────────────────────────────────────────────────────────────
+function MeetingModal({ meeting, onClose, customMinutes, setCustomMinutes, onSetTimer, onCopyLink, onJoinMeeting }) {
+  // Initialise from persisted DB value so active button shows on re-open
+  const [selectedTimer, setSelectedTimer] = useState(() => meeting?.timerMinutes || null);
+  const [feedback, setFeedback] = useState('');
+
+  // Sync when real-time updates change timerMinutes from another source
+  useEffect(() => {
+    if (meeting?.timerMinutes) {
+      setSelectedTimer(meeting.timerMinutes);
+    }
+  }, [meeting?.timerMinutes]);
+
+  if (!meeting) return null;
+
+  const handlePreset = async (minutes) => {
+    setSelectedTimer(minutes);   // optimistic — DB confirm will match via useEffect
+    setFeedback(`Timer set to ${minutes} min ✓`);
+    const result = await onSetTimer(meeting.slotId, minutes);
+    if (result?.success === false) {
+      setFeedback('Failed to set timer');
+    }
+  };
+
+  const handleCustomSet = async () => {
+    const mins = Number(customMinutes[meeting.slotId]);
+    if (!mins || mins <= 0) return;
+    setSelectedTimer(null);
+    setFeedback(`Timer set to ${mins} min ✓`);
+    const result = await onSetTimer(meeting.slotId, mins);
+    if (result?.success === false) {
+      setFeedback('Failed to set timer');
+    }
+  };
+
+  const participants = meeting.participants || [];
+
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()}>
+        {/* ── Header ── */}
+        <div className="modal-header">
+          <div className="modal-header-left">
+            <h2>Edit Meeting</h2>
+            <span className="modal-slot-id">{meeting.slotId}</span>
+          </div>
+          <div className="modal-header-right">
+            <LiveClock />
+            <button className="close-button" onClick={onClose}>&#x2715;</button>
+          </div>
+        </div>
+
+        {/* ── Body ── */}
+        <div className="modal-body">
+
+          {/* Timer section */}
+          <div className="modal-section">
+            <h3>Set Timer</h3>
+            <div className="timer-control">
+              <div className="timer-buttons">
+                {[15, 30, 45].map(min => (
+                  <button
+                    key={min}
+                    type="button"
+                    className={`timer-preset-btn${selectedTimer === min ? ' active' : ''}`}
+                    onClick={() => handlePreset(min)}
+                  >
+                    {min} min
+                  </button>
+                ))}
+              </div>
+              <div className="timer-custom">
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="Custom (min)"
+                  value={customMinutes[meeting.slotId] || ''}
+                  onChange={e => setCustomMinutes({ ...customMinutes, [meeting.slotId]: e.target.value })}
+                />
+                <button
+                  type="button"
+                  onClick={handleCustomSet}
+                  disabled={!customMinutes[meeting.slotId]}
+                >
+                  Set
+                </button>
+              </div>
+              {/* always rendered — reserves height to prevent layout shift */}
+              <div className="timer-feedback" style={{ visibility: feedback ? 'visible' : 'hidden' }}>{feedback || ' '}</div>
+            </div>
+          </div>
+
+          {/* Actions section */}
+          <div className="modal-section">
+            <h3>Actions</h3>
+              {/* Copy link dropdown + Join in same row */}
+              <div className="meeting-buttons">
+                <CopyLinkDropdown slotId={meeting.slotId} onCopy={onCopyLink} />
+                <button onClick={() => onJoinMeeting(meeting.slotId)} className="join-meeting-button">🎥 Join Meeting</button>
+              </div>
+          </div>
+
+          {/* Info section */}
+          <div className="modal-section">
+            <h3>Info</h3>
+            <div className="modal-info-grid">
+              <div className="info-row">
+                <span className="info-label">Created</span>
+                <span className="info-value">{meeting.createdAt?.toDate?.()?.toLocaleString() || 'N/A'}</span>
+              </div>
+              <div className="info-row">
+                <span className="info-label">Ends At</span>
+                <span className="info-value">{meeting.endsAt?.toDate?.()?.toLocaleString() || 'Not set'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Participants section */}
+          <div className="modal-section">
+            <h3>Participants <span className="participant-count">{participants.length}</span></h3>
+            {participants.length > 0 ? (
+              <ul className="participants-list">
+                {participants.map((p, index) => {
+                  const name = typeof p === 'string' ? 'Guest' : (p.name || 'Guest');
+                  const id = typeof p === 'string' ? p : (p.id || '');
+                  const shortId = id ? id.slice(0, 6) : '—';
+                  return (
+                    <li key={`${id}-${index}`} className="participant-item">
+                      <span className="participant-avatar">{name.charAt(0).toUpperCase()}</span>
+                      <span className="participant-name">{name}</span>
+                      <span className="participant-id">#{shortId}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <div className="no-participants">No participants yet</div>
+            )}
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function AdminDashboard({ adminData }) {
   const navigate = useNavigate();
@@ -74,11 +290,12 @@ function AdminDashboard({ adminData }) {
     window.location.href = `/?s=${roomId}&name=Admin`;
   };
 
-  const handleCopyLink = async (slotId) => {
-    const meetingLink = `${window.location.origin}/?s=${slotId}&t=c`;
+  const handleCopyLink = async (slotId, type = 'c') => {
+    const meetingLink = `${window.location.origin}/?s=${slotId}&t=${type}`;
+    const label = type === 'l' ? 'Lawyer' : 'Client';
     try {
       await navigator.clipboard.writeText(meetingLink);
-      setSuccess(`Meeting link copied to clipboard!`);
+      setSuccess(`${label} link copied to clipboard!`);
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       const textArea = document.createElement('textarea');
@@ -87,7 +304,7 @@ function AdminDashboard({ adminData }) {
       textArea.select();
       try {
         document.execCommand('copy');
-        setSuccess(`Meeting link copied to clipboard!`);
+        setSuccess(`${label} link copied to clipboard!`);
         setTimeout(() => setSuccess(''), 3000);
       } catch (fallbackErr) {
         setError('Failed to copy link. Please copy manually: ' + meetingLink);
@@ -105,87 +322,19 @@ function AdminDashboard({ adminData }) {
     }
   };
 
-  const handleSetTimer = async (slotId, minutes) => {
-    if (!minutes || minutes <= 0) {
-      setError('Please enter a valid duration in minutes');
-      return;
-    }
+  const handleSetTimer = useCallback(async (slotId, minutes) => {
+    if (!minutes || minutes <= 0) return { success: false };
     const result = await setMeetingTimer(slotId, minutes);
     if (!result.success) {
       setError(result.error || 'Failed to set timer');
     } else {
       setSuccess(`Timer set for ${minutes} minutes`);
+      setTimeout(() => setSuccess(''), 3000);
     }
-  };
+    return result;
+  }, []);
 
-  // Modal Component
-  const MeetingModal = ({ meeting, onClose }) => {
-    if (!meeting) return null;
-    return (
-      <div className="modal-overlay" onClick={onClose}>
-        <div className="modal-content" onClick={e => e.stopPropagation()}>
-          <div className="modal-header">
-            <h2>Meeting Details: {meeting.slotId}</h2>
-            <button className="close-button" onClick={onClose}>&times;</button>
-          </div>
-          <div className="modal-body">
-            <div className="modal-section">
-              <h3>Set Timer</h3>
-              <div className="timer-control">
-                <div className="timer-buttons">
-                  <button type="button" onClick={() => handleSetTimer(meeting.slotId, 15)}>15m</button>
-                  <button type="button" onClick={() => handleSetTimer(meeting.slotId, 30)}>30m</button>
-                  <button type="button" onClick={() => handleSetTimer(meeting.slotId, 45)}>45m</button>
-                </div>
-                <div className="timer-custom">
-                  <input
-                    type="number"
-                    min="1"
-                    placeholder="Custom (min)"
-                    value={customMinutes[meeting.slotId] || ''}
-                    onChange={(e) => setCustomMinutes({ ...customMinutes, [meeting.slotId]: e.target.value })}
-                  />
-                  <button type="button" onClick={() => handleSetTimer(meeting.slotId, Number(customMinutes[meeting.slotId]))} disabled={!customMinutes[meeting.slotId]}>Set</button>
-                </div>
-              </div>
-            </div>
-            <div className="modal-section">
-              <h3>Actions</h3>
-              <div className="meeting-buttons">
-                <button onClick={() => handleCopyLink(meeting.slotId)} className="copy-link-button">📋 Copy Joining Link</button>
-                <button onClick={() => handleJoinMeeting(meeting.slotId)} className="join-meeting-button">Join Meeting</button>
-              </div>
-            </div>
-            <div className="modal-section">
-              <h3>Info</h3>
-              <div className="meeting-info">
-                <div className="meeting-date">Created: {meeting.createdAt?.toDate?.()?.toLocaleString() || 'N/A'}</div>
-                <div className="meeting-participants">
-                  <strong>Participants ({meeting.participants?.length || 0}):</strong>
-                  {meeting.participants && meeting.participants.length > 0 ? (
-                    <ul className="participants-list">
-                      {meeting.participants.map((p, index) => {
-                        const name = typeof p === 'string' ? 'Guest' : (p.name || 'Guest');
-                        const id = typeof p === 'string' ? p : p.id;
-                        return (
-                          <li key={`${id}-${index}`}>
-                            {name} <span className="participant-id">({id.slice(0, 4)}...)</span>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  ) : (
-                    <div className="no-participants">No participants yet</div>
-                  )}
-                </div>
-                <div className="meeting-date">Ends at: {meeting.endsAt?.toDate?.()?.toLocaleString() || 'Not set'}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
+  // MeetingModal is now defined outside this component (above)
 
   const handleLogout = () => {
     localStorage.removeItem('adminId');
@@ -315,6 +464,8 @@ function AdminDashboard({ adminData }) {
                           </select>
                         </div>
 
+                        <CopyLinkDropdown slotId={meeting.slotId} onCopy={handleCopyLink} variant="icon" />
+
                         <button
                           className="actions-button"
                           onClick={() => setSelectedMeeting(meeting)}
@@ -338,6 +489,11 @@ function AdminDashboard({ adminData }) {
         <MeetingModal
           meeting={meetings.find(m => m.id === selectedMeeting.id) || selectedMeeting}
           onClose={() => setSelectedMeeting(null)}
+          customMinutes={customMinutes}
+          setCustomMinutes={setCustomMinutes}
+          onSetTimer={handleSetTimer}
+          onCopyLink={handleCopyLink}
+          onJoinMeeting={handleJoinMeeting}
         />
       )}
     </div>

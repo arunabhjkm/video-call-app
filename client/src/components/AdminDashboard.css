@@ -65,6 +65,7 @@
   font-weight: 700;
   background: linear-gradient(90deg, #60a5fa, #a78bfa);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   letter-spacing: -1px;
 }
@@ -281,6 +282,13 @@
   border-radius: 16px;
   transition: all 0.3s ease;
   gap: 20px;
+  position: relative; /* Setup stacking context */
+  z-index: 1; /* Default stack level */
+}
+
+/* Ensure the row pops to front when a dropdown within it is open */
+.meeting-item:has(.copy-dropdown-wrapper.open) {
+  z-index: 50;
 }
 
 .meeting-item:hover {
@@ -288,6 +296,7 @@
   background: rgba(15, 23, 42, 0.9);
   transform: translateY(-2px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  z-index: 10; /* Float above other plain rows on hover */
 }
 
 .meeting-info {
@@ -359,19 +368,32 @@
   gap: 6px;
 }
 
-.timer-buttons button {
+/* .timer-buttons old generic styles are replaced by .timer-preset-btn */
+.timer-preset-btn {
   flex: 1;
-  padding: 10px 12px;
+  padding: 11px 12px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(96, 165, 250, 0.15);
-  color: #e2e8f0;
+  border: 1.5px solid rgba(96, 165, 250, 0.25);
+  background: rgba(96, 165, 250, 0.08);
+  color: #93c5fd;
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
+  letter-spacing: 0.02em;
 }
 
-.timer-buttons button:hover {
-  background: rgba(96, 165, 250, 0.25);
+.timer-preset-btn:hover {
+  background: rgba(96, 165, 250, 0.18);
+  border-color: rgba(96, 165, 250, 0.5);
+  color: #bfdbfe;
+}
+
+.timer-preset-btn.active {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  border-color: #22c55e;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(34, 197, 94, 0.4);
 }
 
 .timer-custom {
@@ -446,22 +468,134 @@
 
 .meeting-buttons {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  flex-direction: row;
+  gap: 12px;
   width: 100%;
 }
 
 .copy-link-button {
-  padding: 10px 20px;
-  border-radius: 8px;
+  padding: 12px 20px;
+  border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
   color: #e2e8f0;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
   width: 100%;
+}
+
+/* --- Dropdown Styles --- */
+.copy-dropdown-wrapper {
+  position: relative;
+  flex: 1;
+}
+
+.copy-dropdown-wrapper .copy-link-button {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+}
+
+.dropdown-arrow {
+  margin-left: 6px;
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.copy-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 100%;
+  min-width: 220px;
+  background: #1e293b;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+  z-index: 100;
+  animation: fadeIn 0.15s ease-out;
+}
+
+/* --- Icon Variant (for List View) --- */
+.copy-dropdown-wrapper.icon-variant {
+  flex: 0 0 auto;
+}
+
+.copy-link-button.icon-button {
+  padding: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 16px;
+  border-radius: 8px; /* Match pencil button */
+}
+
+.copy-link-button.icon-button .dropdown-arrow {
+  margin-left: 0;
+  font-size: 8px;
+}
+
+.copy-dropdown-menu.menu-right {
+  left: auto;
+  right: 0;
+}
+
+.copy-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: #e2e8f0;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.copy-dropdown-item:hover {
+  background: rgba(96, 165, 250, 0.15);
+}
+
+.copy-type-icon {
+  font-size: 18px;
+  background: rgba(255, 255, 255, 0.05);
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+}
+
+.copy-item-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.copy-item-text strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.copy-item-text small {
+  font-size: 11px;
+  color: #94a3b8;
+  font-family: monospace;
+  margin-top: 2px;
 }
 
 .copy-link-button:hover {
@@ -471,8 +605,8 @@
 }
 
 .join-meeting-button {
-  padding: 10px 20px;
-  border-radius: 8px;
+  padding: 12px 20px;
+  border-radius: 10px;
   border: none;
   background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
   color: white;
@@ -480,7 +614,8 @@
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
-  width: 100%;
+  flex: 1;
+  white-space: nowrap;
 }
 
 .join-meeting-button:hover {
@@ -553,23 +688,58 @@
   background: #1e293b;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 20px;
-  padding: 30px;
-  width: 100%;
-  max-width: 500px;
+  padding: 32px;
+  width: 95%;
+  max-width: 920px;
   max-height: 90vh;
   overflow-y: auto;
   position: relative;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
   animation: slideUp 0.3s ease-out;
 }
 
 .modal-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 24px;
   padding-bottom: 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.modal-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.modal-header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.modal-slot-id {
+  font-size: 13px;
+  color: #60a5fa;
+  font-family: monospace;
+  background: rgba(96, 165, 250, 0.1);
+  border: 1px solid rgba(96, 165, 250, 0.2);
+  padding: 2px 8px;
+  border-radius: 5px;
+  letter-spacing: 0.05em;
+}
+
+.modal-clock {
+  font-size: 14px;
+  font-weight: 600;
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  letter-spacing: 0.04em;
 }
 
 .modal-header h2 {
@@ -582,10 +752,11 @@
   background: transparent;
   border: none;
   color: #94a3b8;
-  font-size: 24px;
+  font-size: 20px;
   cursor: pointer;
-  padding: 4px;
-  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px; /* Square with soft corners */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -593,20 +764,35 @@
 }
 
 .close-button:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  background: rgba(239, 68, 68, 0.1); /* faint red square */
+  color: #ef4444;                      /* red X */
 }
 
 .modal-body {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px 28px;
 }
+
+/* Left column: spans rows 1 & 2  (Timer, then Actions) */
+/* Right column: spans rows 1 & 2 (Info, then Participants) */
+/* We use named grid-column placement on each section */
 
 .modal-section {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  padding: 18px;
+}
+
+/* On narrow screens fall back to single column */
+@media (max-width: 640px) {
+  .modal-body {
+    grid-template-columns: 1fr;
+  }
 }
 
 .modal-section h3 {
@@ -640,38 +826,120 @@
   }
 }
 
+.timer-feedback {
+  min-height: 32px;          /* always reserve space — no layout shift */
+  font-size: 13px;
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  border-radius: 6px;
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  transition: opacity 0.2s;
+}
+
+/* --- Info Grid --- */
+.modal-info-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.info-label {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.info-value {
+  font-size: 13px;
+  color: #e2e8f0;
+  font-weight: 500;
+}
+
+/* --- Participant Count Badge --- */
+.participant-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(96, 165, 250, 0.15);
+  color: #60a5fa;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 20px;
+  padding: 1px 7px;
+  margin-left: 6px;
+  border: 1px solid rgba(96, 165, 250, 0.25);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 /* --- Participant List Styles --- */
 .participants-list {
   list-style: none;
   padding: 0;
-  margin: 8px 0 0 0;
+  margin: 4px 0 0 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 150px;
+  max-height: 200px;
   overflow-y: auto;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 8px;
-  padding: 8px;
 }
 
-.participants-list li {
-  font-size: 13px;
-  color: #e2e8f0;
+.participant-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px;
-  border-radius: 4px;
+  gap: 10px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  transition: background 0.15s;
 }
 
-.participants-list li:hover {
+.participant-item:hover {
   background: rgba(255, 255, 255, 0.05);
 }
 
+.participant-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.participant-name {
+  font-size: 14px;
+  color: #e2e8f0;
+  font-weight: 500;
+  flex: 1;
+}
+
 .participant-id {
-  color: #64748b;
+  color: #475569;
   font-size: 11px;
+  font-family: monospace;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
 .no-participants {
@@ -679,4 +947,9 @@
   color: #64748b;
   font-style: italic;
   margin-top: 4px;
+  padding: 12px;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 8px;
+  border: 1px dashed rgba(255, 255, 255, 0.08);
 }

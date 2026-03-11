@@ -330,7 +330,15 @@ export const setMeetingTimer = async (slotId, minutes) => {
   try {
     const durationMs = minutes * 60 * 1000;
     const endsAtDate = new Date(Date.now() + durationMs);
-    return await updateMeetingStatus(slotId, 'active', endsAtDate);
+    // Also persist the chosen duration so the UI can restore it
+    const meetingRef = doc(db, MEETINGS_COLLECTION, slotId);
+    await updateDoc(meetingRef, {
+      status: 'active',
+      endsAt: endsAtDate,
+      timerMinutes: minutes,
+      updatedAt: serverTimestamp()
+    });
+    return { success: true };
   } catch (error) {
     console.error('Error setting meeting timer:', error);
     return {
