@@ -685,15 +685,12 @@ function VideoCall({ initialRoomId }) {
             <Video
               stream={stream}
               muted={true}
+              micOn={micOn}
               isLocal={true}
               name={nameParam}
               cameraOn={cameraOn}
+              type={typeParam}
             />
-            <div className="user-label">{getUserTypeIcon(typeParam)} {nameParam || 'You'}</div>
-            <div className="status-icons">
-              {!micOn && <span className="icon" title="Microphone muted">🔇</span>}
-              {!cameraOn && <span className="icon" title="Camera off">📹</span>}
-            </div>
           </div>
           {peers.map((peer) => {
             const status = peerStates[peer.peerID] || {};
@@ -708,13 +705,10 @@ function VideoCall({ initialRoomId }) {
                   peer={peer.peer}
                   name={peerName}
                   cameraOn={isCamOn}
+                  micOn={isMicOn}
+                  type={peerType}
+                  networkStatus={status.network}
                 />
-                <div className="user-label">{getUserTypeIcon(peerType)} {peerName}</div>
-                <div className="status-icons">
-                  {!isMicOn && <span className="icon" title="Microphone muted">🔇</span>}
-                  {!isCamOn && <span className="icon" title="Camera off">📹</span>}
-                  {status.network === 'low' && <span className="network-indicator" title="Low Connectivity">⚠️ Low Network</span>}
-                </div>
               </div>
             );
           })}
@@ -733,14 +727,25 @@ function VideoCall({ initialRoomId }) {
 
       {joined && (
         <div className="controls-bar">
-          <button className={`control-btn ${!micOn ? 'off' : ''}`} onClick={toggleMic} aria-label={micOn ? 'Mute microphone' : 'Unmute microphone'}>
-            {micOn ? '🎤' : '🔇'}
+          <button className={`control-btn ${!micOn ? 'off' : ''}`} onClick={toggleMic} aria-label={micOn ? 'Mute' : 'Unmute'}>
+            {micOn ? (
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+            ) : (
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+            )}
           </button>
-          <button className={`control-btn ${!cameraOn ? 'off' : ''}`} onClick={toggleCamera} aria-label={cameraOn ? 'Turn off camera' : 'Turn on camera'}>
-            {cameraOn ? '📹' : '📷'}
+
+          <button className={`control-btn ${!cameraOn ? 'off' : ''}`} onClick={toggleCamera} aria-label={cameraOn ? 'Camera Off' : 'Camera On'}>
+            {cameraOn ? (
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m22 8-6 4 6 4V8Z"></path><rect width="14" height="12" x="2" y="6" rx="2" ry="2"></rect></svg>
+            ) : (
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 16 3 3 3-3"></path><path d="m16 8 6 4-6 4"></path><path d="M2 6v12a2 2 0 0 0 2 2h10"></path><path d="M5.64 5.64A2 2 0 0 0 5 7v10a2 2 0 0 0 2 2h7"></path><path d="M2 14.36V10c0-1.1.9-2 2-2h10"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+            )}
           </button>
-          <button className="control-btn end-call" onClick={disconnect} aria-label="End call">
-            📞
+
+
+          <button className="control-btn end-call" onClick={disconnect} aria-label="Leave Call">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"></path><line x1="22" y1="2" x2="2" y2="22"></line></svg>
           </button>
         </div>
       )}

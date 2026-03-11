@@ -375,73 +375,90 @@ body.in-call {
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  gap: 20px;
-  background: rgba(15, 23, 42, 0.9);
+  gap: 12px;
+  background: rgba(30, 41, 59, 0.85); /* Slate 800ish */
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  padding: 16px 32px;
-  border-radius: 50px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 12px 24px;
+  border-radius: 40px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   z-index: 100;
   transition: all 0.3s ease;
 }
 
 @media (min-width: 1024px) {
   .controls-bar {
-    bottom: 40px;
-    padding: 18px 36px;
-    gap: 24px;
-  }
-
-  .controls-bar:hover {
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.15);
-    transform: translateX(-50%) translateY(-4px);
+    bottom: 32px;
+    padding: 14px 28px;
+    gap: 16px;
   }
 }
 
 .control-btn {
-  width: 56px;
-  height: 56px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   border: none;
-  font-size: 22px;
+  font-size: 0; /* Hide emoji text if any remains */
   cursor: pointer;
-  background: rgba(255, 255, 255, 0.15);
-  color: white;
-  transition: all 0.3s ease;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fafc;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  position: relative;
 }
 
 @media (min-width: 1024px) {
   .control-btn {
-    width: 60px;
-    height: 60px;
-    font-size: 24px;
+    width: 52px;
+    height: 52px;
   }
 }
 
-.control-btn:hover {
-  background: rgba(255, 255, 255, 0.25);
-  transform: scale(1.15) translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+.control-btn svg {
+  width: 22px;
+  height: 22px;
+  transition: transform 0.2s ease;
 }
 
+.control-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.control-btn:active {
+  transform: scale(0.95);
+}
+
+/* Off / Alternate State - Premium Red */
 .control-btn.off {
-  background: #ef4444;
-  /* Red for muted/off */
+  background: #ea4335; /* Google Meet Red */
   color: white;
 }
 
+.control-btn.off:hover {
+  background: #d93025;
+}
+
+/* End Call Button - Circular Red */
 .control-btn.end-call {
-  background: #ef4444;
+  background: #ea4335;
+  width: 72px; /* Wider like in many modern UIs */
+  border-radius: 36px;
+  color: white;
 }
 
 .control-btn.end-call:hover {
-  background: #dc2626;
+  background: #d93025;
+}
+
+.control-btn.end-call svg {
+  width: 26px;
+  height: 26px;
 }
 
 /* --- Mobile Responsiveness --- */

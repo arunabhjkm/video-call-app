@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './Video.css'; // We'll need to create this
 
-const Video = ({ peer, stream, name, cameraOn, isLocal, muted }) => {
+const Video = ({ peer, stream, name, cameraOn, micOn, isLocal, muted, type, networkStatus }) => {
     const ref = useRef();
     const [volume, setVolume] = useState(0);
     const audioContextRef = useRef(null);
@@ -121,6 +121,37 @@ const Video = ({ peer, stream, name, cameraOn, isLocal, muted }) => {
                     </div>
                 </div>
             )}
+
+            {/* User Label Integrated */}
+            <div className="user-label-unified">
+                <span className="user-type-icon">
+                    {type === 'lawyer' || type === 'l' ? '🧑‍⚖️' : '👤'}
+                </span>
+                <span className="user-name-text">
+                    {isLocal ? 'You' : (name || 'User')}
+                </span>
+            </div>
+
+            {/* Status Icons Integrated */}
+            <div className="status-icons-unified">
+                {/* We only show "muted" icon if mic is off. camera status is obvious by avatar */}
+                {/* For consistency with the request, let's show them if off */}
+                {!cameraOn && (
+                    <div className="status-icon cam-off" title="Camera off">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34"></path><line x1="1" y1="1" x2="23" y2="23"></line><path d="m21 21-4.34-4.34"></path><path d="M21 7v10.34"></path></svg>
+                    </div>
+                )}
+                {!micOn && (
+                    <div className="status-icon mic-off" title="Microphone muted">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                    </div>
+                )}
+                {networkStatus === 'low' && (
+                    <div className="status-icon network-low" title="Low Network">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 20h22L12 2Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
