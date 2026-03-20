@@ -5,6 +5,8 @@ import Peer from 'simple-peer';
 import Video from './Video';
 import './App.css';
 import { checkMeetingExists, addParticipantToMeeting, removeParticipantFromMeeting, listenMeetingChanges, updateMeetingStatus } from './services/firebaseService';
+import { updateParticipantLog } from './services/loggingService';
+import { getDeviceInfo, getMediaPermissions, createAudioMonitor } from './utils/mediaUtils';
 
 // Polyfills handled by vite-plugin-node-polyfills
 
@@ -45,6 +47,16 @@ function VideoCall({ initialRoomId }) {
   const streamRef = useRef();
   const micRef = useRef(micOn);
   const cameraRef = useRef(cameraOn);
+
+  // Logging Refs
+  const loggingIntervalRef = useRef(null);
+  const audioMonitorRef = useRef(null);
+  const [currentMicLevel, setCurrentMicLevel] = useState(0);
+  const micLevelRef = useRef(0);
+
+  useEffect(() => {
+    micLevelRef.current = currentMicLevel;
+  }, [currentMicLevel]);
 
   useEffect(() => {
     micRef.current = micOn;
@@ -263,6 +275,96 @@ function VideoCall({ initialRoomId }) {
       connection.removeEventListener('change', updateNetworkStatus);
     };
   }, []);
+
+  // Detailed Participant Logging (Device Info, Permissions, Mic Level, ICE States)
+  useEffect(() => {
+    const activeRoomID = roomID || slotParam || initialRoomId;
+    if (!joined || !activeRoomID || !socket.id) {
+      if (loggingIntervalRef.current) {
+        clearInterval(loggingIntervalRef.current);
+        loggingIntervalRef.current = null;
+      }
+      if (audioMonitorRef.current) {
+        audioMonitorRef.current.stop();
+        audioMonitorRef.current = null;
+      }
+      return;
+    }
+
+    const initLogger = async () => {
+      console.log("Starting diagnostics logger for room:", activeRoomID, "User:", socket.id);
+      const deviceInfo = getDeviceInfo();
+      const initialPermissions = await getMediaPermissions();
+
+      // Initial entry in logs
+      await updateParticipantLog(activeRoomID, socket.id, {
+        name: nameParam,
+        type: typeParam,
+        device: deviceInfo,
+        permissions: initialPermissions,
+        status: 'joined',
+        iceConnectionStates: {}
+      });
+
+      // Simple audio monitor for local stream
+      if (streamRef.current) {
+        if (audioMonitorRef.current) audioMonitorRef.current.stop();
+        audioMonitorRef.current = createAudioMonitor(streamRef.current, (level) => {
+          setCurrentMicLevel(level);
+        });
+      }
+
+      // Start periodic updates (every 7 seconds)
+      if (loggingIntervalRef.current) clearInterval(loggingIntervalRef.current);
+      
+      loggingIntervalRef.current = setInterval(async () => {
+        const permissionsStatus = await getMediaPermissions();
+        
+        // Collect ICE Connection states
+        const iceStates = {};
+        peersRef.current.forEach(p => {
+          if (p.peer && p.peer._pc) {
+            iceStates[p.peerID] = p.peer._pc.iceConnectionState;
+          }
+        });
+
+        const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+        const downlink = connection ? connection.downlink : 'unknown';
+
+        updateParticipantLog(activeRoomID, socket.id, {
+          permissions: permissionsStatus,
+          mediaStatus: {
+            micOn: micRef.current,
+            cameraOn: cameraRef.current,
+            micWorking: micLevelRef.current > 0,
+            micLevel: micLevelRef.current
+          },
+          network: {
+            quality: (connection && connection.downlink < 1.0) ? 'low' : 'good',
+            downlink: downlink
+          },
+          iceConnectionStates: iceStates,
+          status: 'active'
+        });
+      }, 7000);
+    };
+
+    initLogger();
+
+    return () => {
+      if (loggingIntervalRef.current) {
+        clearInterval(loggingIntervalRef.current);
+        loggingIntervalRef.current = null;
+      }
+      if (audioMonitorRef.current) {
+        audioMonitorRef.current.stop();
+        audioMonitorRef.current = null;
+      }
+      if (activeRoomID && socket.id) {
+        updateParticipantLog(activeRoomID, socket.id, { status: 'disconnected' });
+      }
+    };
+  }, [joined, roomID, slotParam, socket.id, initialRoomId]);
 
   function createPeer(userToSignal, callerID, stream) {
     const peer = new Peer({

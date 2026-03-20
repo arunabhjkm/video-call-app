@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createMeeting, getAdminMeetings, updateMeetingStatus, setMeetingTimer, listenAdminMeetings } from '../services/firebaseService';
+import { listenParticipantLogs } from '../services/loggingService';
 import './AdminDashboard.css';
 
 // ─── LiveClock ────────────────────────────────────────────────────────────────
@@ -77,6 +78,17 @@ function MeetingModal({ meeting, onClose, customMinutes, setCustomMinutes, onSet
   // Initialise from persisted DB value so active button shows on re-open
   const [selectedTimer, setSelectedTimer] = useState(() => meeting?.timerMinutes || null);
   const [feedback, setFeedback] = useState('');
+  const [logs, setLogs] = useState({});
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+
+  useEffect(() => {
+    if (meeting?.slotId) {
+      const unsubscribe = listenParticipantLogs(meeting.slotId, (newLogs) => {
+        setLogs(newLogs);
+      });
+      return () => unsubscribe();
+    }
+  }, [meeting?.slotId]);
 
   // Sync when real-time updates change timerMinutes from another source
   useEffect(() => {
@@ -213,6 +225,102 @@ function MeetingModal({ meeting, onClose, customMinutes, setCustomMinutes, onSet
             )}
           </div>
 
+          {/* Diagnostics Section */}
+          <div className="modal-section" style={{ gridColumn: 'span 2' }}>
+            <div className="diagnostics-header-toggle" onClick={() => setShowDiagnostics(!showDiagnostics)}>
+              <h3>Live Diagnostics 📡</h3>
+              <span className={`diagnostics-toggle-icon ${showDiagnostics ? 'expanded' : ''}`}>▼</span>
+            </div>
+            
+            <div className={`diagnostics-collapsible-content ${showDiagnostics ? 'expanded' : ''}`}>
+              {Object.keys(logs).length > 0 ? (
+                <div className="diagnostics-list">
+                  {Object.entries(logs).map(([id, log]) => {
+                    const name = log.name || 'Guest';
+                    const isMicWorking = log.mediaStatus?.micWorking;
+                    const micLevel = log.mediaStatus?.micLevel || 0;
+                    const permissions = log.permissions || {};
+                    const network = log.network || {};
+                    const device = log.device || {};
+                    
+                    return (
+                      <div key={id} className="diagnostic-card">
+                        <div className="diagnostic-header">
+                          <div className="diagnostic-user">
+                            <span className="diagnostic-name">{name}</span>
+                            <span className="diagnostic-type">{log.type}</span>
+                          </div>
+                          <span className={`diagnostic-status-tag ${log.status}`}>
+                            {log.status === 'active' ? '● Live' : (log.status === 'joined' ? '● Joined' : log.status)}
+                          </span>
+                        </div>
+                        
+                        <div className="diagnostic-grid">
+                          <div className="diagnostic-item">
+                            <span className="diag-label">Device</span>
+                            <span className="diag-value">
+                              {device.browser} on {device.os} ({device.platform})
+                            </span>
+                          </div>
+                          
+                          <div className="diagnostic-item">
+                            <span className="diag-label">Network</span>
+                            <span className="diag-value">
+                              <span className={network.quality === 'low' ? 'badge-red' : 'badge-green'}>
+                                {network.quality === 'low' ? '⚠️ Low' : '✓ Good'}
+                              </span>
+                              <small style={{ marginLeft: '4px', opacity: 0.7 }}>({network.downlink} Mbps)</small>
+                            </span>
+                          </div>
+
+                          <div className="diagnostic-item">
+                            <span className="diag-label">Permissions</span>
+                            <div className="diag-value">
+                              <span title="Mic" className={permissions.mic === 'granted' ? 'badge-green' : 'badge-red'} style={{ marginRight: '10px' }}>
+                                🎙️ {permissions.mic}
+                              </span>
+                              <span title="Camera" className={permissions.camera === 'granted' ? 'badge-green' : 'badge-red'}>
+                                📷 {permissions.camera}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="diagnostic-item">
+                            <span className="diag-label">Real Mic Test</span>
+                            <div className="diag-value">
+                              <span className={isMicWorking ? 'badge-green' : 'badge-red'}>
+                                {isMicWorking ? '🔊 Picking up sound' : '🔇 No sound detected'}
+                              </span>
+                            </div>
+                            {isMicWorking && (
+                              <div className="mic-level-bar">
+                                <div className="mic-level-fill" style={{ width: `${Math.min(micLevel * 2.5, 100)}%` }}></div>
+                              </div>
+                            )}
+                          </div>
+
+                          {log.iceConnectionStates && Object.keys(log.iceConnectionStates).length > 0 && (
+                            <div className="ice-states">
+                              <span className="diag-label" style={{ marginBottom: '4px', display: 'block' }}>ICE Connection States</span>
+                              {Object.entries(log.iceConnectionStates).map(([peerId, state]) => (
+                                <div key={peerId} className="ice-peer-row">
+                                  <span>Peer {peerId.slice(0,4)}:</span>
+                                  <span className={`ice-peer-state ${state}`}>{state}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="no-participants">Waiting for diagnostic data... (User must be in the call)</div>
+              )}
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
@@ -230,6 +338,11 @@ function AdminDashboard({ adminData }) {
   const [activeTab, setActiveTab] = useState('create'); // 'create' or 'join'
   const [customMinutes, setCustomMinutes] = useState({});
   const [selectedMeeting, setSelectedMeeting] = useState(null);
+  
+  // Search and Pagination states
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 5;
 
   const adminEmail = localStorage.getItem('adminEmail') || adminData?.email || 'admin@example.com';
 
@@ -442,54 +555,116 @@ function AdminDashboard({ adminData }) {
 
         {activeTab === 'list' && (
           <div className="join-meeting-section">
-            <h2>All Meetings</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2 style={{ margin: 0 }}>All Meetings</h2>
+              <span className="participant-count" style={{ fontSize: '14px', padding: '4px 12px' }}>
+                Total: {meetings.length}
+              </span>
+            </div>
+
+            {/* Search Bar */}
+            <div className="search-container">
+              <div className="search-input-wrapper">
+                <span className="search-icon">🔍</span>
+                <input
+                  type="text"
+                  placeholder="Search by Slot ID..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setCurrentPage(1); // Reset to page 1 on search
+                  }}
+                />
+              </div>
+            </div>
 
             <div className="meetings-list-section" style={{ marginTop: 0, borderTop: 'none', paddingTop: 0 }}>
               {loadingMeetings ? (
                 <div className="loading">Loading meetings...</div>
               ) : meetings.length === 0 ? (
                 <div className="no-meetings">No meetings found</div>
-              ) : (
-                <div className="meetings-list">
-                  {meetings.map((meeting) => (
-                    <div key={meeting.id} className="meeting-item">
-                      <div className="meeting-info">
-                        <div className="meeting-slot">Slot ID: <strong>{meeting.slotId}</strong></div>
-                        <div className="meeting-status">
-                          <span className={`status-badge ${meeting.status}`}>{meeting.status}</span>
-                        </div>
-                      </div>
+              ) : (() => {
+                // Filter and Paginate
+                const filteredMeetings = meetings.filter(m => 
+                  m.slotId?.toLowerCase().includes(searchQuery.toLowerCase())
+                );
+                
+                const totalPages = Math.ceil(filteredMeetings.length / itemsPerPage);
+                const startIndex = (currentPage - 1) * itemsPerPage;
+                const paginatedMeetings = filteredMeetings.slice(startIndex, startIndex + itemsPerPage);
 
-                      <div className="meeting-actions">
-                        {/* Status Control - Keep visible for quick access */}
-                        <div className="status-control">
-                          <select
-                            value={meeting.status || 'pending'}
-                            onChange={(e) => handleStatusChange(meeting.slotId, e.target.value)}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <option value="pending">Pending</option>
-                            <option value="active">Active</option>
-                            <option value="success">Success</option>
-                          </select>
-                        </div>
+                return (
+                  <>
+                    <div className="meetings-list">
+                      {paginatedMeetings.length > 0 ? (
+                        paginatedMeetings.map((meeting) => (
+                          <div key={meeting.id} className="meeting-item">
+                            <div className="meeting-info">
+                              <div className="meeting-slot">Slot ID: <strong>{meeting.slotId}</strong></div>
+                              <div className="meeting-status">
+                                <span className={`status-badge ${meeting.status}`}>{meeting.status}</span>
+                              </div>
+                            </div>
 
-                        <CopyLinkDropdown slotId={meeting.slotId} onCopy={handleCopyLink} variant="icon" />
+                            <div className="meeting-actions">
+                              <div className="status-control">
+                                <select
+                                  value={meeting.status || 'pending'}
+                                  onChange={(e) => handleStatusChange(meeting.slotId, e.target.value)}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <option value="pending">Pending</option>
+                                  <option value="active">Active</option>
+                                  <option value="success">Success</option>
+                                </select>
+                              </div>
 
-                        <button
-                          className="actions-button"
-                          onClick={() => setSelectedMeeting(meeting)}
-                          title="Edit Meeting"
+                              <CopyLinkDropdown slotId={meeting.slotId} onCopy={handleCopyLink} variant="icon" />
+
+                              <button
+                                className="actions-button"
+                                onClick={() => setSelectedMeeting(meeting)}
+                                title="Edit Meeting"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                  <path d="M21.731 2.269a2.625 2.625 0 00-3.712 0l-1.157 1.157 3.712 3.712 1.157-1.157a2.625 2.625 0 000-3.712zM19.513 8.199l-3.712-3.712-12.15 12.15a5.25 5.25 0 00-1.32 2.214l-.8 2.685a.75.75 0 00.933.933l2.685-.8a5.25 5.25 0 002.214-1.32L19.513 8.2z" />
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="no-meetings">No meetings match your search</div>
+                      )}
+                    </div>
+
+                    {/* Pagination Controls */}
+                    {totalPages > 1 && (
+                      <div className="pagination-container">
+                        <button 
+                          className="pagination-button" 
+                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                          disabled={currentPage === 1}
                         >
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M21.731 2.269a2.625 2.625 0 00-3.712 0l-1.157 1.157 3.712 3.712 1.157-1.157a2.625 2.625 0 000-3.712zM19.513 8.199l-3.712-3.712-12.15 12.15a5.25 5.25 0 00-1.32 2.214l-.8 2.685a.75.75 0 00.933.933l2.685-.8a5.25 5.25 0 002.214-1.32L19.513 8.2z" />
-                          </svg>
+                          &lt;
+                        </button>
+                        
+                        <span className="pagination-nav">
+                          Page {currentPage} of {totalPages}
+                        </span>
+
+                        <button 
+                          className="pagination-button" 
+                          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                          disabled={currentPage === totalPages}
+                        >
+                          &gt;
                         </button>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
         )}
