@@ -15,6 +15,23 @@ const io = new Server(server, {
     }
 });
 
+// Firebase Initialization
+const { initializeApp } = require('firebase/app');
+const { getFirestore, doc, getDoc, updateDoc, deleteDoc, serverTimestamp } = require('firebase/firestore');
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDsge-TPFVIxE1yopZK2YRwAzmk0OLU3Ag",
+  authDomain: "web-rtc-362e0.firebaseapp.com",
+  projectId: "web-rtc-362e0",
+  storageBucket: "web-rtc-362e0.firebasestorage.app",
+  messagingSenderId: "272786511368",
+  appId: "1:272786511368:web:2fef1adbeb4499d26623bd",
+  measurementId: "G-OGXDQQP55S"
+};
+
+const app_fb = initializeApp(firebaseConfig);
+const db = getFirestore(app_fb);
+
 app.get('/', (req, res) => {
     res.send('Server is running');
 });
@@ -101,9 +118,45 @@ io.on('connection', socket => {
         });
     });
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', async () => {
         console.log(`[${socket.id}] disconnected`);
         const roomID = socketToRoom[socket.id];
+        
+        // Remove participant from Firestore on server disconnect
+        if (roomID) {
+            try {
+                const meetingRef = doc(db, 'meetings', roomID);
+                const meetingDoc = await getDoc(meetingRef);
+                
+                if (meetingDoc.exists()) {
+                    const data = meetingDoc.data();
+                    let participants = data.participants || [];
+                    const initialLength = participants.length;
+                    
+                    // Filter out the participant by ID (socket.id)
+                    participants = participants.filter(p => {
+                        if (typeof p === 'string') return p !== socket.id;
+                        return p.id !== socket.id;
+                    });
+                    
+                    if (participants.length !== initialLength) {
+                        await updateDoc(meetingRef, {
+                            participants: participants,
+                            updatedAt: serverTimestamp()
+                        });
+                        console.log(`[${socket.id}] Removed from Firestore room ${roomID}`);
+                    }
+
+                    // Also delete the specific log document for this session
+                    const logRef = doc(db, 'meetings', roomID, 'logs', socket.id);
+                    await deleteDoc(logRef);
+                    console.log(`[${socket.id}] Log document deleted for room ${roomID}`);
+                }
+            } catch (error) {
+                console.error(`[${socket.id}] Failed to remove from Firestore:`, error);
+            }
+        }
+
         let room = usersInRoom[roomID];
         if (room) {
             room = room.filter(id => id !== socket.id);

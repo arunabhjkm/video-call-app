@@ -146,31 +146,30 @@ export const addParticipantToMeeting = async (slotId, participantId, participant
     }
 
     const meetingData = meetingDoc.data();
-    const participants = meetingData.participants || [];
+    let participants = meetingData.participants || [];
 
-    // Check if participant is already in list (by ID)
-    let isPresent = false;
-    // Handle legacy array of strings if necessary, though we prefer objects now
-    if (participants.length > 0 && typeof participants[0] === 'string') {
-      if (participants.includes(participantId)) isPresent = true;
-    } else {
-      if (participants.some(p => p.id === participantId)) isPresent = true;
-    }
+    // Filter out any existing participant with the SAME NAME or SAME ID
+    // This prevents duplicates if a user refreshes or joins twice
+    const otherParticipants = participants.filter(p => {
+      if (typeof p === 'string') return p !== participantId;
+      return p.id !== participantId && p.name !== participantName;
+    });
 
-    // Add participant if not already in list
-    if (!isPresent) {
-      // Use arrayUnion with the new object structure
-      const newParticipant = { id: participantId, name: participantName, joinedAt: new Date().toISOString() };
+    // Add the new participant
+    const newParticipant = { 
+      id: participantId, 
+      name: participantName, 
+      joinedAt: new Date().toISOString() 
+    };
 
-      console.log(`Adding participant ${participantId} (${participantName}) to slot ${slotId}`);
-      await updateDoc(meetingRef, {
-        participants: arrayUnion(newParticipant),
-        updatedAt: serverTimestamp()
-      });
-      console.log("Participant added successfully");
-    } else {
-      console.log("Participant already present");
-    }
+    console.log(`Updating participant list for ${participantName} (${participantId}) in slot ${slotId}`);
+    
+    await updateDoc(meetingRef, {
+      participants: [...otherParticipants, newParticipant],
+      updatedAt: serverTimestamp()
+    });
+    
+    console.log("Participant updated successfully");
 
     return {
       success: true

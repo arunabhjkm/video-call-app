@@ -233,89 +233,104 @@ function MeetingModal({ meeting, onClose, customMinutes, setCustomMinutes, onSet
             </div>
             
             <div className={`diagnostics-collapsible-content ${showDiagnostics ? 'expanded' : ''}`}>
-              {Object.keys(logs).length > 0 ? (
-                <div className="diagnostics-list">
-                  {Object.entries(logs).map(([id, log]) => {
-                    const name = log.name || 'Guest';
-                    const isMicWorking = log.mediaStatus?.micWorking;
-                    const micLevel = log.mediaStatus?.micLevel || 0;
-                    const permissions = log.permissions || {};
-                    const network = log.network || {};
-                    const device = log.device || {};
-                    
-                    return (
-                      <div key={id} className="diagnostic-card">
-                        <div className="diagnostic-header">
-                          <div className="diagnostic-user">
-                            <span className="diagnostic-name">{name}</span>
-                            <span className="diagnostic-type">{log.type}</span>
-                          </div>
-                          <span className={`diagnostic-status-tag ${log.status}`}>
-                            {log.status === 'active' ? '● Live' : (log.status === 'joined' ? '● Joined' : log.status)}
-                          </span>
-                        </div>
-                        
-                        <div className="diagnostic-grid">
-                          <div className="diagnostic-item">
-                            <span className="diag-label">Device</span>
-                            <span className="diag-value">
-                              {device.browser} on {device.os} ({device.platform})
+              {Object.keys(logs).length > 0 ? (() => {
+                // Deduplicate logs by name, keeping the most recent one
+                const deduplicatedLogs = Object.entries(logs).reduce((acc, [id, log]) => {
+                  const name = log.name || 'Guest';
+                  const currentLogTime = log.updatedAt?.seconds || 0;
+                  const existingLogTime = acc[name]?.updatedAt?.seconds || 0;
+
+                  if (!acc[name] || currentLogTime > existingLogTime) {
+                    acc[name] = { ...log, id };
+                  }
+                  return acc;
+                }, {});
+
+                return (
+                  <div className="diagnostics-list">
+                    {Object.values(deduplicatedLogs).map((log) => {
+                      const id = log.id;
+                      const name = log.name || 'Guest';
+                      const isMicWorking = log.mediaStatus?.micWorking;
+                      const micLevel = log.mediaStatus?.micLevel || 0;
+                      const permissions = log.permissions || {};
+                      const network = log.network || {};
+                      const device = log.device || {};
+                      
+                      return (
+                        <div key={id} className="diagnostic-card">
+                          <div className="diagnostic-header">
+                            <div className="diagnostic-user">
+                              <span className="diagnostic-name">{name}</span>
+                              <span className="diagnostic-type">{log.type}</span>
+                            </div>
+                            <span className={`diagnostic-status-tag ${log.status}`}>
+                              {log.status === 'active' ? '● Live' : (log.status === 'joined' ? '● Joined' : log.status)}
                             </span>
                           </div>
                           
-                          <div className="diagnostic-item">
-                            <span className="diag-label">Network</span>
-                            <span className="diag-value">
-                              <span className={network.quality === 'low' ? 'badge-red' : 'badge-green'}>
-                                {network.quality === 'low' ? '⚠️ Low' : '✓ Good'}
-                              </span>
-                              <small style={{ marginLeft: '4px', opacity: 0.7 }}>({network.downlink} Mbps)</small>
-                            </span>
-                          </div>
-
-                          <div className="diagnostic-item">
-                            <span className="diag-label">Permissions</span>
-                            <div className="diag-value">
-                              <span title="Mic" className={permissions.mic === 'granted' ? 'badge-green' : 'badge-red'} style={{ marginRight: '10px' }}>
-                                🎙️ {permissions.mic}
-                              </span>
-                              <span title="Camera" className={permissions.camera === 'granted' ? 'badge-green' : 'badge-red'}>
-                                📷 {permissions.camera}
+                          <div className="diagnostic-grid">
+                            <div className="diagnostic-item">
+                              <span className="diag-label">Device</span>
+                              <span className="diag-value">
+                                {device.browser} on {device.os} ({device.platform})
                               </span>
                             </div>
-                          </div>
-
-                          <div className="diagnostic-item">
-                            <span className="diag-label">Real Mic Test</span>
-                            <div className="diag-value">
-                              <span className={isMicWorking ? 'badge-green' : 'badge-red'}>
-                                {isMicWorking ? '🔊 Picking up sound' : '🔇 No sound detected'}
+                            
+                            <div className="diagnostic-item">
+                              <span className="diag-label">Network</span>
+                              <span className="diag-value">
+                                <span className={network.quality === 'low' ? 'badge-red' : 'badge-green'}>
+                                  {network.quality === 'low' ? '⚠️ Low' : '✓ Good'}
+                                </span>
+                                <small style={{ marginLeft: '4px', opacity: 0.7 }}>({network.downlink} Mbps)</small>
                               </span>
                             </div>
-                            {isMicWorking && (
-                              <div className="mic-level-bar">
-                                <div className="mic-level-fill" style={{ width: `${Math.min(micLevel * 2.5, 100)}%` }}></div>
+
+                            <div className="diagnostic-item">
+                              <span className="diag-label">Permissions</span>
+                              <div className="diag-value">
+                                <span title="Mic" className={permissions.mic === 'granted' ? 'badge-green' : 'badge-red'} style={{ marginRight: '10px' }}>
+                                  🎙️ {permissions.mic}
+                                </span>
+                                <span title="Camera" className={permissions.camera === 'granted' ? 'badge-green' : 'badge-red'}>
+                                  📷 {permissions.camera}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="diagnostic-item">
+                              <span className="diag-label">Real Mic Test</span>
+                              <div className="diag-value">
+                                <span className={isMicWorking ? 'badge-green' : 'badge-red'}>
+                                  {isMicWorking ? '🔊 Picking up sound' : '🔇 No sound detected'}
+                                </span>
+                              </div>
+                              {isMicWorking && (
+                                <div className="mic-level-bar">
+                                  <div className="mic-level-fill" style={{ width: `${Math.min(micLevel * 2.5, 100)}%` }}></div>
+                                </div>
+                              )}
+                            </div>
+
+                            {log.iceConnectionStates && Object.keys(log.iceConnectionStates).length > 0 && (
+                              <div className="ice-states">
+                                <span className="diag-label" style={{ marginBottom: '4px', display: 'block' }}>ICE Connection States</span>
+                                {Object.entries(log.iceConnectionStates).map(([peerId, state]) => (
+                                  <div key={peerId} className="ice-peer-row">
+                                    <span>Peer {peerId.slice(0,4)}:</span>
+                                    <span className={`ice-peer-state ${state}`}>{state}</span>
+                                  </div>
+                                ))}
                               </div>
                             )}
                           </div>
-
-                          {log.iceConnectionStates && Object.keys(log.iceConnectionStates).length > 0 && (
-                            <div className="ice-states">
-                              <span className="diag-label" style={{ marginBottom: '4px', display: 'block' }}>ICE Connection States</span>
-                              {Object.entries(log.iceConnectionStates).map(([peerId, state]) => (
-                                <div key={peerId} className="ice-peer-row">
-                                  <span>Peer {peerId.slice(0,4)}:</span>
-                                  <span className={`ice-peer-state ${state}`}>{state}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
+                      );
+                    })}
+                  </div>
+                );
+              })() : (
                 <div className="no-participants">Waiting for diagnostic data... (User must be in the call)</div>
               )}
             </div>
